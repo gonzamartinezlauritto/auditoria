@@ -4,16 +4,21 @@ from config import DB_CONFIG
 
 
 DEBUG_ACTIVO = True
-DEBUG_CUPONES = {21072, 36860, 34036}
+DEBUG_CUPONES = []
+def redondear_a_diez_centavos(valor):
+    valor = Decimal(str(valor))
 
+    return (
+        (valor / Decimal("0.10"))
+        .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        * Decimal("0.10")
+    ).quantize(Decimal("0.00"))
 
 def limpiar_numero(numero):
     return str(numero or "").strip()
 
-
 def normalizar_resultado(numero):
     return str(numero or "").strip().zfill(4)
-
 
 def coincide(numero_apostado, numero_resultado):
     apuesta = limpiar_numero(numero_apostado)
@@ -677,9 +682,13 @@ def main():
         """, (fecha, cod))
         cant_cupones = cur.fetchone()[0]
 
+        total_final = redondear_a_diez_centavos(
+            total_normales + total_aprox + total_red
+        )
+
         print("\n=== RESULTADO ===")
         print(f"Lotería: {provincia} - {nombre_extracto}")
-        print(f"TOTAL: {formatear(total_normales + total_aprox + total_red)}")
+        print(f"TOTAL: {formatear(total_final)}")
         print(f"NORMALES: {formatear(total_normales)}")
         print(f"APROX: {formatear(total_aprox)}")
         print(f"RED: {formatear(total_red)}")
