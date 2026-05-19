@@ -635,7 +635,7 @@ def main():
               AND codigo_extracto = %s
               AND tipo_jugada = 'normal'
         """, (fecha, cod))
-        total_normales = Decimal(str(cur.fetchone()[0] or 0))
+        total_normales = redondear_a_diez_centavos( Decimal(str(cur.fetchone()[0] or 0)) / Decimal("100"))
 
         cur.execute("""
             SELECT COALESCE(SUM(premio_total), 0)
@@ -644,7 +644,7 @@ def main():
               AND codigo_extracto = %s
               AND tipo_jugada IN ('aprox_3', 'aprox_4')
         """, (fecha, cod))
-        total_aprox = Decimal(str(cur.fetchone()[0] or 0))
+        total_aprox = redondear_a_diez_centavos( Decimal(str(cur.fetchone()[0] or 0)) / Decimal("100"))
 
         cur.execute("""
             SELECT COALESCE(SUM(premio_total), 0)
@@ -653,17 +653,31 @@ def main():
               AND codigo_extracto = %s
               AND tipo_jugada = 'redoblona'
         """, (fecha, cod))
-        total_red = Decimal(str(cur.fetchone()[0] or 0))
+        total_red = redondear_a_diez_centavos( Decimal(str(cur.fetchone()[0] or 0)) / Decimal("100"))
 
         cur.execute("""
             SELECT COUNT(*)
-            FROM premios
-            WHERE fecha_sorteo = %s
-              AND codigo_extracto = %s
-              AND premio_total <> 0
+            FROM (
+                SELECT
+                    q.n_agent,
+                    q.n_subag,
+                    q.n_maqui,
+                    q.n_cupon
+                FROM premios p
+                JOIN quiniela_exp q
+                    ON q.id = p.quiniela_exp_id
+                WHERE p.fecha_sorteo = %s
+                AND p.codigo_extracto = %s
+                AND p.premio_total <> 0
+                GROUP BY
+                    q.n_agent,
+                    q.n_subag,
+                    q.n_maqui,
+                    q.n_cupon
+            ) t
         """, (fecha, cod))
-        cant_premios = cur.fetchone()[0]
-
+        cant_premios = cur.fetchone()[0] or 0
+        
         cur.execute("""
             SELECT COUNT(*)
             FROM (
@@ -684,16 +698,50 @@ def main():
 
         total_final = redondear_a_diez_centavos(
             total_normales + total_aprox + total_red
-        )
+        ).quantize(Decimal("0.01"))
+
+        cur.execute("""
+            SELECT COALESCE(SUM(n_impapos), 0)
+            FROM quiniela_exp
+            WHERE n_fsorteo = %s
+            AND n_codext = %s
+            AND COALESCE(c_ecupon, '') = 'N'
+            AND COALESCE(n_nodef, 0) <> 1
+            AND n_impapos > 0
+        """, (fecha, cod))
+        total_recaudado = redondear_a_diez_centavos(Decimal(str(cur.fetchone()[0] or 0)) / Decimal("100")).quantize(Decimal("0.01"))
+
+
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM (
+                SELECT
+                    n_agent,
+                    n_subag,
+                    n_maqui,
+                    n_cupon
+                FROM quiniela_exp
+                WHERE n_fsorteo = %s
+                AND n_codext = %s
+                AND COALESCE(c_ecupon, '') = 'N'
+                AND COALESCE(n_nodef, 0) <> 1
+                GROUP BY n_agent, n_subag, n_maqui, n_cupon
+            ) t
+        """, (fecha, cod))
+        cupones_jugados = cur.fetchone()[0] or 0
+
 
         print("\n=== RESULTADO ===")
-        print(f"Lotería: {provincia} - {nombre_extracto}")
-        print(f"TOTAL: {formatear(total_final)}")
-        print(f"NORMALES: {formatear(total_normales)}")
-        print(f"APROX: {formatear(total_aprox)}")
-        print(f"RED: {formatear(total_red)}")
-        print(f"PREMIOS: {cant_premios}")
-        print(f"CUPONES: {cant_cupones}")
+        print(f"SORTEO: {nombre_extracto}")
+        print("=================")
+        print(f"CUPONES JUGADOS: {cupones_jugados}")
+        print("=================") 
+        print(f"RECAUDACIÓN: {formatear(total_recaudado)}")
+        print("=================")
+        print(f"IMPORTE PREMIADOS: {formatear(total_final)}")
+        print("=================")
+        print(f"APUESTAS PREMIADAS: {cant_premios}")
+
 
         cur.execute("""
             SELECT tipo_jugada, COUNT(*), COALESCE(SUM(premio_total), 0)
