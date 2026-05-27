@@ -2,6 +2,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.pagesizes import A3, landscape
 from reportlab.lib.units import cm
 from decimal import Decimal, ROUND_HALF_UP
 import psycopg2
@@ -643,6 +644,14 @@ def calcular_extracto(conn, fecha, cod):
     """, (fecha, cod))
     cant_premios = cur.fetchone()[0] or 0
 
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM aciertos_dbf
+        WHERE fecha_sorteo = %s
+          AND codigo_extracto = %s
+    """, (fecha, cod))
+    archivo_aciertos_dbf = cur.fetchone()[0] or 0
+
     cur.close()
 
     return {
@@ -652,10 +661,11 @@ def calcular_extracto(conn, fecha, cod):
         "recaudacion": total_recaudado,
         "importe_premiados": total_final,
         "apuestas_premiadas": cant_premios,
+        "archivo_aciertos_dbf": archivo_aciertos_dbf,
     }
 
 
-def imprimir_reporte(reportes):
+def imprimir_reporte(reportes, cupones_ganadores_unicos):
 
     ORDEN_CODIGOS = [52, 56, 51, 54, 50, 55, 53]
 
@@ -711,29 +721,29 @@ def imprimir_reporte(reportes):
         f"{formatear(redondear_a_diez_centavos(total_premios)):>22}"
         f"{total_apuestas:>24}"
     )
+    print("\n==============================")
+    print(f"CUPONES GANADORES ÚNICOS: {cupones_ganadores_unicos}")
+    print("==============================")
 
-def generar_pdf_control_aciertos(reportes, fecha, archivo_salida="control_aciertos.pdf"):
+def generar_pdf_control_aciertos(
+    reportes,
+    fecha,
+    cupones_ganadores_unicos,
+    cupones_ganadores_dbf,
+    archivo_salida="control_aciertos.pdf"
+):
     doc = SimpleDocTemplate(
         archivo_salida,
-        pagesize=landscape(A4),
-        rightMargin=0.7 * cm,
-        leftMargin=0.7 * cm,
-        topMargin=0.7 * cm,
-        bottomMargin=0.7 * cm,
+        pagesize=landscape(A3),
+        rightMargin=1 * cm,
+        leftMargin=1 * cm,
+        topMargin=1 * cm,
+        bottomMargin=1 * cm,
     )
-
 
     ORDEN_CODIGOS = [52, 56, 51, 54, 50, 55, 53]
-
-    orden_map = {
-        codigo: i
-        for i, codigo in enumerate(ORDEN_CODIGOS)
-    }
-
-    reportes = sorted(
-        reportes,
-        key=lambda x: orden_map.get(x["codigo_extracto"], 999)
-    )
+    orden_map = {codigo: i for i, codigo in enumerate(ORDEN_CODIGOS)}
+    reportes = sorted(reportes, key=lambda x: orden_map.get(x["codigo_extracto"], 999))
 
     styles = getSampleStyleSheet()
 
@@ -741,42 +751,44 @@ def generar_pdf_control_aciertos(reportes, fecha, archivo_salida="control_aciert
         "title",
         parent=styles["Title"],
         fontName="Helvetica-Bold",
-        fontSize=14,
+        fontSize=20,
         alignment=1,
-        spaceAfter=14,
+        spaceAfter=18,
     )
 
     normal_bold = ParagraphStyle(
         "normal_bold",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=9,
+        fontSize=13,
+        leading=16,
     )
 
     cell_style = ParagraphStyle(
         "cell",
         parent=styles["Normal"],
-        fontSize=8,
-        leading=10,
+        fontSize=16,
+        leading=20,
     )
 
     header_style = ParagraphStyle(
         "header",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=8,
+        fontSize=14,
         alignment=1,
-        leading=10,
+        leading=16,
     )
+
     titulo_tabla_style = ParagraphStyle(
         "titulo_tabla",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=11,
-        alignment=1,  # CENTRO
-        spaceAfter=10,
+        fontSize=16,
+        alignment=1,
+        spaceAfter=14,
     )
-    
+
     story = []
 
     story.append(Paragraph("Control de Aciertos - Quiniela", title_style))
@@ -789,11 +801,11 @@ def generar_pdf_control_aciertos(reportes, fecha, archivo_salida="control_aciert
         [Paragraph("Fecha de Sorteo:", normal_bold), Paragraph(fecha_str, normal_bold)],
     ]
 
-    t_enc = Table(encabezado, colWidths=[4 * cm, 8 * cm])
+    t_enc = Table(encabezado, colWidths=[5 * cm, 10 * cm])
     t_enc.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("FONTSIZE", (0, 0), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     story.append(t_enc)
 
@@ -803,75 +815,205 @@ def generar_pdf_control_aciertos(reportes, fecha, archivo_salida="control_aciert
 
     data = [
         [
+            "", "", "", "", "", "",
+            Paragraph("Cupones Premiados", header_style),
+            "",
+        ],
+        [
             Paragraph("Extracto", header_style),
-            Paragraph("Recaudación", header_style),
-            Paragraph("Importe<br/>Premiados ", header_style),
-            Paragraph("Cupones<br/>Premiados", header_style),
-        ]
+            Paragraph("Importe<br/>Recaudación", header_style),
+            Paragraph("Importe<br/>Aciertos", header_style),
+            Paragraph("Importe<br/>Comisión", header_style),
+            Paragraph("Importe<br/>Utilidad", header_style),
+            Paragraph("%<br/>Util/Rec.", header_style),
+            Paragraph("Archivo<br/>FrontEnd", header_style),
+            Paragraph("Generados<br/>Auditoría", header_style),
+        ],
     ]
 
     total_recaudacion = Decimal("0.00")
     total_aciertos = Decimal("0.00")
     total_comision = Decimal("0.00")
     total_utilidad = Decimal("0.00")
-    total_cupones = 0
+    total_archivo_dbf = 0
+    total_auditoria = 0
 
     for r in reportes:
         recaudacion = Decimal(str(r["recaudacion"]))
         aciertos = Decimal(str(r["importe_premiados"]))
-        premiadas = int(r["apuestas_premiadas"])
+        archivo_dbf = int(r.get("archivo_aciertos_dbf", 0))
+        generados_auditoria = int(r["apuestas_premiadas"])
+
+        comision = (recaudacion * Decimal("0.20")).quantize(Decimal("0.01"))
+        utilidad = (recaudacion - aciertos - comision).quantize(Decimal("0.01"))
+
+        porcentaje = Decimal("0.00")
+        if recaudacion > 0:
+            porcentaje = ((utilidad / recaudacion) * Decimal("100")).quantize(Decimal("0.01"))
 
         total_recaudacion += recaudacion
         total_aciertos += aciertos
-        total_cupones += premiadas
+        total_comision += comision
+        total_utilidad += utilidad
+        total_archivo_dbf += archivo_dbf
+        total_auditoria += generados_auditoria
 
         data.append([
             Paragraph(r["sorteo"], cell_style),
             formatear(recaudacion),
             formatear(aciertos),
-            premiadas,
+            formatear(comision),
+            formatear(utilidad),
+            str(porcentaje).replace(".", ","),
+            archivo_dbf,
+            generados_auditoria,
         ])
 
     data.append([
         Paragraph("Totales", header_style),
         formatear(total_recaudacion),
         formatear(total_aciertos),
-        total_cupones,
+        formatear(total_comision),
+        formatear(total_utilidad),
+        "",
+        total_archivo_dbf,
+        total_auditoria,
     ])
+
+    celeste = colors.HexColor("#B8E6F8")
 
     table = Table(
         data,
         colWidths=[
-            5.2 * cm,
-            3.9 * cm,
-            4.0 * cm,
-            3.5 * cm,
+            7.0 * cm,
+            4.8 * cm,
+            4.8 * cm,
+            4.5 * cm,
+            4.8 * cm,
+            3.0 * cm,
+            3.4 * cm,
+            3.4 * cm,
         ],
-        repeatRows=1,
+        repeatRows=2,
     )
 
-    peach = colors.HexColor("#B8E6F8")
-
     table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.6, colors.black),
-        ("BACKGROUND", (0, 0), (-1, 0), peach),
-        ("BACKGROUND", (0, -1), (-1, -1), peach),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME", (0, -2), (-1, -1), "Helvetica-Bold"),
-        ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
-        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+        ("GRID", (0, 1), (-1, -1), 0.6, colors.black),
+
+        ("SPAN", (6, 0), (7, 0)),
+        ("ALIGN", (6, 0), (7, 0), "CENTER"),
+        ("FONTNAME", (6, 0), (7, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (6, 0), (7, 0), 13),
+
+        ("BACKGROUND", (0, 1), (-1, 1), celeste),
+        ("BACKGROUND", (0, -1), (-1, -1), celeste),
+
+        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+
+        ("ALIGN", (1, 2), (-1, -1), "RIGHT"),
+        ("ALIGN", (0, 1), (0, -1), "LEFT"),
+        ("ALIGN", (0, -1), (-1, -1), "CENTER"),
+
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -3), [colors.white]),
-        ("ALIGN", (0, -2), (0, -1), "CENTER"),
+
+        # HEADER
+        ("FONTSIZE", (0, 1), (-1, 1), 14),
+        # DATOS
+        ("FONTSIZE", (0, 2), (-1, -2), 16),
+        # TOTALES
+        ("FONTSIZE", (0, -1), (-1, -1), 16),
+
+        ("TOPPADDING", (0, 1), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), 12),
     ]))
 
     story.append(table)
+    story.append(Spacer(1, 16))
+
+    tabla_cupones_unicos = Table(
+        [
+            [
+                Paragraph("Cupones Ganadores Únicos", header_style),
+                Paragraph("Archivo<br/>FrontEnd", header_style),
+                Paragraph("Auditoría", header_style),
+            ],
+            [
+                "Totales",
+                str(cupones_ganadores_dbf),
+                str(cupones_ganadores_unicos),
+            ],
+        ],
+        colWidths=[8 * cm, 4.5 * cm, 4.5 * cm],
+    )
+
+    tabla_cupones_unicos.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.6, colors.black),
+        ("BACKGROUND", (0, 0), (-1, 0), celeste),
+        ("BACKGROUND", (0, -1), (-1, -1), celeste),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("FONTSIZE", (0, 0), (-1, 0), 14),
+        ("FONTSIZE", (0, 1), (-1, -1), 16),
+        ("TOPPADDING", (0, 0), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+    ]))
+
+    story.append(tabla_cupones_unicos)
+
     doc.build(story)
 
     print(f"PDF generado: {archivo_salida}")
 
+def obtener_cupones_ganadores_unicos(conn, fecha):
+    cur = conn.cursor()
 
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM (
+            SELECT
+                q.n_agent,
+                q.n_subag,
+                q.n_maqui,
+                q.n_cupon
+            FROM premios p
+            JOIN quiniela_exp q
+                ON q.id = p.quiniela_exp_id
+            WHERE p.fecha_sorteo = %s
+              AND p.premio_total <> 0
+            GROUP BY
+                q.n_agent,
+                q.n_subag,
+                q.n_maqui,
+                q.n_cupon
+        ) t
+    """, (fecha,))
+
+    return cur.fetchone()[0] or 0
+
+def obtener_cupones_ganadores_unicos_dbf(conn, fecha):
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM (
+            SELECT
+                agencia,
+                subagencia,
+                nromaquina,
+                numero
+            FROM aciertos_dbf
+            WHERE fecha_sorteo = %s
+            GROUP BY
+                agencia,
+                subagencia,
+                nromaquina,
+                numero
+        ) t
+    """, (fecha,))
+
+    return cur.fetchone()[0] or 0
 
 def main():
     conn = psycopg2.connect(**DB_CONFIG)
@@ -885,9 +1027,18 @@ def main():
             reportes.append(resultado)
 
         conn.commit()
+        
+        cupones_ganadores_unicos = obtener_cupones_ganadores_unicos(conn, FECHA)
+        cupones_ganadores_dbf = obtener_cupones_ganadores_unicos_dbf(conn, FECHA)
 
-        imprimir_reporte(reportes)
-        generar_pdf_control_aciertos(reportes,FECHA,"control_aciertos_quiniela.pdf")
+        imprimir_reporte(reportes, cupones_ganadores_unicos)
+        generar_pdf_control_aciertos(
+            reportes,
+            FECHA,
+            cupones_ganadores_unicos,
+            cupones_ganadores_dbf,
+            "control_aciertos_quiniela.pdf"
+        )
 
     except Exception as e:
         conn.rollback()

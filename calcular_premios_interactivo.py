@@ -264,6 +264,31 @@ def marcar_redoblonas_por_patron(apuestas):
 
     return apuestas
 
+def obtener_cupones_ganadores_unicos(cur, fecha):
+
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM (
+            SELECT
+                q.n_agent,
+                q.n_subag,
+                q.n_maqui,
+                q.n_cupon
+            FROM premios p
+            JOIN quiniela_exp q
+                ON q.id = p.quiniela_exp_id
+            WHERE p.fecha_sorteo = %s
+              AND p.premio_total <> 0
+            GROUP BY
+                q.n_agent,
+                q.n_subag,
+                q.n_maqui,
+                q.n_cupon
+        ) t
+    """, (fecha,))
+
+    return cur.fetchone()[0] or 0
+
 
 def main():
     fecha = int(input("Fecha: ").strip())
@@ -730,6 +755,11 @@ def main():
         """, (fecha, cod))
         cupones_jugados = cur.fetchone()[0] or 0
 
+        cupones_ganadores_unicos = obtener_cupones_ganadores_unicos(cur, fecha)
+
+        print("\n==============================")
+        print(f"CUPONES GANADORES ÚNICOS: {cupones_ganadores_unicos}")
+        print("==============================")
 
         print("\n=== RESULTADO ===")
         print(f"SORTEO: {nombre_extracto}")
@@ -741,8 +771,11 @@ def main():
         print(f"IMPORTE PREMIADOS: {formatear(total_final)}")
         print("=================")
         print(f"APUESTAS PREMIADAS: {cant_premios}")
+        print("\n==============================")
+        print(f"CUPONES GANADORES ÚNICOS: {cupones_ganadores_unicos}")
+        print("==============================")
 
-
+        
         cur.execute("""
             SELECT tipo_jugada, COUNT(*), COALESCE(SUM(premio_total), 0)
             FROM premios
