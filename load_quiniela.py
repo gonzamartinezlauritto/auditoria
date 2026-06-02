@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 import psycopg2
 import time
 
@@ -10,7 +11,6 @@ DB_CONFIG = {
     "port": 5432,
 }
 
-FILE_PATH = Path("data/quiniela.exp")
 
 COPY_SQL = """
 COPY quiniela_exp (
@@ -43,75 +43,88 @@ WITH (
 """
 
 
-def mostrar_preview_archivo():
+def mostrar_preview_archivo(file_path: Path):
     print("\n==============================")
     print("PREVIEW ARCHIVO")
     print("==============================")
-    print("Ruta:", FILE_PATH.resolve())
+    print("Ruta:", file_path.resolve())
 
-    with FILE_PATH.open("r", encoding="utf-8", newline="") as f:
+    with file_path.open("r", encoding="utf-8", newline="") as f:
         for i in range(5):
             linea = f.readline().strip()
             if not linea:
                 break
-            print(f"[{i+1}] {linea}")
+            print(f"[{i + 1}] {linea}")
 
 
-def mostrar_resumen_cargas(cur):
+def mostrar_resumen_fecha_turno(cur, fecha: int, turno: str):
     cur.execute("""
         SELECT
             n_fsorteo,
-            n_femis,
+            TRIM(c_tsorteo) AS turno,
             n_codext,
             COUNT(*) AS cantidad
         FROM quiniela_exp
-        GROUP BY n_fsorteo, n_femis, n_codext
-        ORDER BY n_fsorteo DESC, n_codext
-        LIMIT 50
-    """)
+        WHERE n_fsorteo = %s
+          AND TRIM(c_tsorteo) = %s
+        GROUP BY n_fsorteo, TRIM(c_tsorteo), n_codext
+        ORDER BY n_codext
+    """, (fecha, turno))
 
     rows = cur.fetchall()
 
     print("\n==============================")
-    print("RESUMEN FECHAS CARGADAS")
+    print("RESUMEN CARGA FECHA/TURNO")
     print("==============================")
+
+    total = 0
 
     for row in rows:
         print(row)
+        total += row[3]
+
+    print(f"TOTAL FILAS FECHA/TURNO: {total}")
+
+    return total
 
 
-def mostrar_ultimas_apuestas(cur):
+def mostrar_fechas_turnos_detectados(cur):
     cur.execute("""
         SELECT
             n_fsorteo,
-            n_codext,
-            n_agent,
-            n_subag,
-            n_maqui,
-            n_cupon,
-            c_nroapos,
-            n_impapos
+            TRIM(c_tsorteo) AS turno,
+            COUNT(*) AS cantidad
         FROM quiniela_exp
-        ORDER BY id DESC
-        LIMIT 10
+        GROUP BY n_fsorteo, TRIM(c_tsorteo)
+        ORDER BY n_fsorteo DESC, turno
+        LIMIT 20
     """)
 
-    rows = cur.fetchall()
-
     print("\n==============================")
-    print("ÚLTIMAS APUESTAS INSERTADAS")
+    print("FECHAS/TURNOS DETECTADOS")
     print("==============================")
 
-    for row in rows:
+    for row in cur.fetchall():
         print(row)
 
 
 def main() -> None:
-    if not FILE_PATH.exists():
-        print(f"No se encontró el archivo: {FILE_PATH.resolve()}")
+    if len(sys.argv) < 4:
+        print("Uso:")
+        print("python load_quiniela.py <file_path> <fecha> <turno>")
+        print("Ejemplo:")
+        print("python load_quiniela.py uploads/quiniela.exp 20260529 PV")
         return
 
-    mostrar_preview_archivo()
+    file_path = Path(sys.argv[1])
+    fecha = int(sys.argv[2])
+    turno = str(sys.argv[3]).upper().strip()
+
+    if not file_path.exists():
+        print(f"No se encontró el archivo: {file_path.resolve()}")
+        return
+
+    mostrar_preview_archivo(file_path)
 
     start_time = time.time()
 
@@ -123,39 +136,49 @@ def main() -> None:
         cur = conn.cursor()
 
         print("\n==============================")
+        print("LIMPIANDO CARGA ANTERIOR")
+        print("==============================")
+
+        cur.execute("""
+            DELETE FROM quiniela_exp
+            WHERE n_fsorteo = %s
+              AND TRIM(c_tsorteo) = %s
+        """, (fecha, turno))
+
+        eliminados = cur.rowcount
+
+        print(f"Filas eliminadas para {fecha} / {turno}: {eliminados}")
+
+        print("\n==============================")
         print("INICIANDO CARGA")
         print("==============================")
 
-        with FILE_PATH.open("r", encoding="utf-8", newline="") as file:
+        with file_path.open("r", encoding="utf-8", newline="") as file:
             cur.copy_expert(COPY_SQL, file)
+
+        mostrar_fechas_turnos_detectados(cur)
+
+        total_cargado = mostrar_resumen_fecha_turno(
+            cur,
+            fecha,
+            turno
+        )
+
+        if total_cargado == 0:
+            raise Exception(
+                f"El archivo se cargó, pero no hay filas para fecha={fecha}, turno={turno}. "
+                "Verificar que el EXP corresponda al turno indicado."
+            )
 
         conn.commit()
 
-        end_time = time.time()
-        duration = end_time - start_time
+        duration = time.time() - start_time
 
         print("\n==============================")
         print("CARGA COMPLETADA")
         print("==============================")
-
         print(f"Tiempo total: {duration:.2f} segundos")
-
-        mostrar_resumen_cargas(cur)
-        mostrar_ultimas_apuestas(cur)
-
-        # Validación rápida:
-        cur.execute("""
-            SELECT
-                MAX(n_fsorteo)
-            FROM quiniela_exp
-        """)
-
-        ultima_fecha = cur.fetchone()[0]
-
-        print("\n==============================")
-        print("ÚLTIMA FECHA DETECTADA")
-        print("==============================")
-        print(ultima_fecha)
+        print(f"Filas cargadas fecha/turno: {total_cargado}")
 
     except Exception as error:
         if conn:
@@ -165,6 +188,8 @@ def main() -> None:
         print("ERROR")
         print("==============================")
         print(error)
+
+        raise
 
     finally:
         if cur:

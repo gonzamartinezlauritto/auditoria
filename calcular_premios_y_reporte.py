@@ -9,7 +9,7 @@ import psycopg2
 from config import DB_CONFIG
 
 
-FECHA = 20260513
+FECHA = 20260601
 EXTRACTOS = [50, 51, 52, 53, 54, 55, 56]
 
 DEBUG_ACTIVO = False
