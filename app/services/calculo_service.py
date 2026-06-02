@@ -2,12 +2,6 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from app.database import get_connection
 
-
-EXTRACTOS = [50, 51, 52, 53, 54, 55, 56]
-
-DEBUG_ACTIVO = False
-DEBUG_CUPONES = []
-
 def obtener_extractos_del_turno(cur, fecha: int, turno: str):
     cur.execute("""
         SELECT DISTINCT n_codext
