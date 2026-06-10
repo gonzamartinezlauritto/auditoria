@@ -1,7 +1,7 @@
 from pathlib import Path
 import pandas as pd
 import psycopg2
-from config import DB_CONFIG
+from legacy.scripts_viejos.config import DB_CONFIG
 
 FILE_PATH = Path("data/paramqla.xlsx")
 

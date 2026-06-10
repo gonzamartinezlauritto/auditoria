@@ -6,7 +6,7 @@ from reportlab.lib.pagesizes import A3, landscape
 from reportlab.lib.units import cm
 from decimal import Decimal, ROUND_HALF_UP
 import psycopg2
-from config import DB_CONFIG
+from legacy.scripts_viejos.config import DB_CONFIG
 
 
 FECHA = 20260601

@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import pandas as pd
 import psycopg2
-from config import DB_CONFIG
+from legacy.scripts_viejos.config import DB_CONFIG
 
 BASE_DIR = Path(__file__).parent
 EXCEL_PATH = BASE_DIR / "data" / "cuponesGanadores20260312.xlsx"

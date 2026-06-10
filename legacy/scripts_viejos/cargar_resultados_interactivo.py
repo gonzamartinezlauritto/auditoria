@@ -1,5 +1,5 @@
 import psycopg2
-from config import DB_CONFIG
+from legacy.scripts_viejos.config import DB_CONFIG
 
 
 def obtener_nombre_extracto(cur, codigo_extracto: int) -> str:

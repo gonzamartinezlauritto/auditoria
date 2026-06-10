@@ -4,7 +4,7 @@ from decimal import Decimal
 import psycopg2
 from dbfread import DBF
 
-from config import DB_CONFIG
+from legacy.scripts_viejos.config import DB_CONFIG
 
 # ============================================
 # CONFIG

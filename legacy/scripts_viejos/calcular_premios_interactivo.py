@@ -1,6 +1,6 @@
 from decimal import Decimal, ROUND_HALF_UP
 import psycopg2
-from config import DB_CONFIG
+from legacy.scripts_viejos.config import DB_CONFIG
 
 
 DEBUG_ACTIVO = True

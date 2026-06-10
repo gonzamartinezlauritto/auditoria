@@ -1,7 +1,7 @@
 from decimal import Decimal, ROUND_HALF_UP
 from collections import defaultdict
 import psycopg2
-from config import DB_CONFIG
+from legacy.scripts_viejos.config import DB_CONFIG
 
 
 FECHA = 20260312

@@ -1,5 +1,5 @@
 import psycopg2
-from config import DB_CONFIG
+from legacy.scripts_viejos.config import DB_CONFIG
 
 def cargar_resultados(fecha_sorteo: int, codigo_extracto: int, numeros: list[str]) -> None:
     if len(numeros) != 20:
