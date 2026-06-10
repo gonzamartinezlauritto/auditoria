@@ -360,12 +360,13 @@ def calcular_extracto(conn, fecha, turno, cod):
     """, (fecha, cod, fecha, turno, cod))
 
     cur.execute("""
-        SELECT orden_resultado, numero_resultado
+       SELECT orden_resultado, numero_resultado
         FROM resultados
         WHERE fecha_sorteo = %s
-          AND codigo_extracto = %s
+        AND turno = %s
+        AND codigo_extracto = %s
         ORDER BY orden_resultado
-    """, (fecha, cod))
+    """, (fecha, turno, cod))
 
     resultados = cur.fetchall()
 
@@ -801,4 +802,49 @@ def calcular_por_fecha_turno(fecha: int, turno: str):
         }
 
     finally:
+        conn.close()
+
+def obtener_turnos_calculados(cur, fecha: int):
+    cur.execute("""
+        SELECT DISTINCT TRIM(q.c_tsorteo)
+        FROM premios p
+        JOIN quiniela_exp q
+            ON q.id = p.quiniela_exp_id
+        WHERE p.fecha_sorteo = %s
+        ORDER BY TRIM(q.c_tsorteo)
+    """, (fecha,))
+
+    return [row[0] for row in cur.fetchall()]
+
+def obtener_resumen_por_fecha(fecha: int):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        turnos = obtener_turnos_calculados(cur, fecha)
+
+        data = []
+
+        for turno in turnos:
+            resultado = calcular_por_fecha_turno(
+                fecha=fecha,
+                turno=turno
+            )
+
+            data.append(resultado)
+
+        return {
+            "ok": True,
+            "fecha": fecha,
+            "turnos": data
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e)
+        }
+
+    finally:
+        cur.close()
         conn.close()

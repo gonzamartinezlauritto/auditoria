@@ -2,8 +2,7 @@ from typing import List
 from pydantic import BaseModel
 from fastapi import APIRouter
 
-from app.services.resultados_service import cargar_resultados
-
+from app.services.resultados_service import cargar_resultados,obtener_resultados_por_fecha
 
 class ResultadoExtractoRequest(BaseModel):
     codigo_extracto: int
@@ -34,3 +33,7 @@ def cargar_resultados_endpoint(body: CargarResultadosRequest):
         turno=body.turno,
         resultados=resultados,
     )
+
+@router.get("")
+def listar_resultados(fecha: int):
+    return obtener_resultados_por_fecha(fecha)

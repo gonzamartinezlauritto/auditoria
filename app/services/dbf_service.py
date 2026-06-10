@@ -45,6 +45,9 @@ def process_dbf(file_path: Path, fecha: int, turno: str):
         insertados = 0
 
         for row in table:
+            
+            if insertados < 5:
+                print(dict(row))
 
             cur.execute("""
                 INSERT INTO aciertos_dbf (

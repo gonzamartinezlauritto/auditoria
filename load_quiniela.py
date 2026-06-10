@@ -134,21 +134,21 @@ def main() -> None:
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
-
+        """
         print("\n==============================")
         print("LIMPIANDO CARGA ANTERIOR")
         print("==============================")
 
-        cur.execute("""
+        cur.execute(
             DELETE FROM quiniela_exp
             WHERE n_fsorteo = %s
               AND TRIM(c_tsorteo) = %s
-        """, (fecha, turno))
+        , (fecha, turno))
 
         eliminados = cur.rowcount
 
         print(f"Filas eliminadas para {fecha} / {turno}: {eliminados}")
-
+        """
         print("\n==============================")
         print("INICIANDO CARGA")
         print("==============================")
