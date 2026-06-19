@@ -56,7 +56,7 @@ def clave_logica(numero_apostado: str, numero_resultado: str) -> str:
 
     return resultado
 
-
+                                                                                  
 def puesto_esta_en_rango(orden, desde, hasta):
     desde = 0 if desde is None else int(desde)
     hasta = 0 if hasta is None else int(hasta)

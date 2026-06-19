@@ -743,6 +743,85 @@ def calcular_extracto(conn, fecha, turno, cod):
     }
 
 
+def guardar_resumen_auditoria(
+    conn,
+    fecha,
+    turno,
+    reportes,
+    cupones_ganadores_unicos,
+    cupones_ganadores_dbf
+):
+    cur = conn.cursor()
+
+    for r in reportes:
+        recaudacion = Decimal(str(r["recaudacion"]))
+        importe_premiados = Decimal(str(r["importe_premiados"]))
+
+        comision = (recaudacion * Decimal("0.20")).quantize(Decimal("0.01"))
+        utilidad = (recaudacion - importe_premiados - comision).quantize(Decimal("0.01"))
+
+        porcentaje_utilidad = Decimal("0.00")
+        if recaudacion > 0:
+            porcentaje_utilidad = (
+                (utilidad / recaudacion) * Decimal("100")
+            ).quantize(Decimal("0.01"))
+
+        cur.execute("""
+            INSERT INTO resumen_auditoria (
+                fecha_sorteo,
+                turno,
+                codigo_extracto,
+                sorteo,
+                cupones_jugados,
+                recaudacion,
+                importe_premiados,
+                comision,
+                utilidad,
+                porcentaje_utilidad,
+                apuestas_premiadas,
+                archivo_aciertos_dbf,
+                cupones_ganadores_unicos,
+                cupones_ganadores_dbf,
+                fecha_calculo
+            )
+            VALUES (
+                %s,%s,%s,%s,%s,
+                %s,%s,%s,%s,%s,
+                %s,%s,%s,%s,NOW()
+            )
+            ON CONFLICT (fecha_sorteo, turno, codigo_extracto)
+            DO UPDATE SET
+                sorteo = EXCLUDED.sorteo,
+                cupones_jugados = EXCLUDED.cupones_jugados,
+                recaudacion = EXCLUDED.recaudacion,
+                importe_premiados = EXCLUDED.importe_premiados,
+                comision = EXCLUDED.comision,
+                utilidad = EXCLUDED.utilidad,
+                porcentaje_utilidad = EXCLUDED.porcentaje_utilidad,
+                apuestas_premiadas = EXCLUDED.apuestas_premiadas,
+                archivo_aciertos_dbf = EXCLUDED.archivo_aciertos_dbf,
+                cupones_ganadores_unicos = EXCLUDED.cupones_ganadores_unicos,
+                cupones_ganadores_dbf = EXCLUDED.cupones_ganadores_dbf,
+                fecha_calculo = NOW()
+        """, (
+            fecha,
+            turno,
+            r["codigo_extracto"],
+            r["sorteo"],
+            r.get("cupones_jugados", 0),
+            recaudacion,
+            importe_premiados,
+            comision,
+            utilidad,
+            porcentaje_utilidad,
+            r.get("apuestas_premiadas", 0),
+            r.get("archivo_aciertos_dbf", 0),
+            cupones_ganadores_unicos,
+            cupones_ganadores_dbf,
+        ))
+
+    cur.close()
+
 def calcular_por_fecha_turno(fecha: int, turno: str):
     turno = turno.upper()
     conn = get_connection()
@@ -767,8 +846,6 @@ def calcular_por_fecha_turno(fecha: int, turno: str):
             )
             reportes.append(resultado)
 
-        conn.commit()
-
         cur = conn.cursor()
 
         cupones_ganadores_unicos = obtener_cupones_ganadores_unicos(
@@ -784,6 +861,17 @@ def calcular_por_fecha_turno(fecha: int, turno: str):
         )
 
         cur.close()
+
+        guardar_resumen_auditoria(
+            conn=conn,
+            fecha=fecha,
+            turno=turno,
+            reportes=reportes,
+            cupones_ganadores_unicos=cupones_ganadores_unicos,
+            cupones_ganadores_dbf=cupones_ganadores_dbf,
+        )
+
+        conn.commit()
 
         return {
             "ok": True,
@@ -821,22 +909,87 @@ def obtener_resumen_por_fecha(fecha: int):
     cur = conn.cursor()
 
     try:
-        turnos = obtener_turnos_calculados(cur, fecha)
+        cur.execute("""
+            SELECT
+                fecha_sorteo,
+                turno,
+                codigo_extracto,
+                sorteo,
+                cupones_jugados,
+                recaudacion,
+                importe_premiados,
+                comision,
+                utilidad,
+                porcentaje_utilidad,
+                apuestas_premiadas,
+                archivo_aciertos_dbf,
+                cupones_ganadores_unicos,
+                cupones_ganadores_dbf,
+                fecha_calculo
+            FROM resumen_auditoria
+            WHERE fecha_sorteo = %s
+            ORDER BY
+                CASE turno
+                    WHEN 'PV' THEN 1
+                    WHEN 'PR' THEN 2
+                    WHEN 'M' THEN 3
+                    WHEN 'V' THEN 4
+                    WHEN 'N' THEN 5
+                    ELSE 99
+                END,
+                codigo_extracto
+        """, (fecha,))
 
-        data = []
+        rows = cur.fetchall()
 
-        for turno in turnos:
-            resultado = calcular_por_fecha_turno(
-                fecha=fecha,
-                turno=turno
-            )
+        turnos = {}
 
-            data.append(resultado)
+        for row in rows:
+            (
+                fecha_sorteo,
+                turno,
+                codigo_extracto,
+                sorteo,
+                cupones_jugados,
+                recaudacion,
+                importe_premiados,
+                comision,
+                utilidad,
+                porcentaje_utilidad,
+                apuestas_premiadas,
+                archivo_aciertos_dbf,
+                cupones_ganadores_unicos,
+                cupones_ganadores_dbf,
+                fecha_calculo,
+            ) = row
+
+            if turno not in turnos:
+                turnos[turno] = {
+                    "turno": turno,
+                    "cupones_ganadores_unicos": int(cupones_ganadores_unicos),
+                    "cupones_ganadores_dbf": int(cupones_ganadores_dbf),
+                    "fecha_calculo": str(fecha_calculo),
+                    "reportes": []
+                }
+
+            turnos[turno]["reportes"].append({
+                "codigo_extracto": int(codigo_extracto),
+                "sorteo": sorteo,
+                "cupones_jugados": int(cupones_jugados),
+                "recaudacion": float(recaudacion),
+                "importe_premiados": float(importe_premiados),
+                "comision": float(comision),
+                "utilidad": float(utilidad),
+                "porcentaje_utilidad": float(porcentaje_utilidad),
+                "apuestas_premiadas": int(apuestas_premiadas),
+                "archivo_aciertos_dbf": int(archivo_aciertos_dbf),
+            })
 
         return {
             "ok": True,
             "fecha": fecha,
-            "turnos": data
+            "origen": "resumen_auditoria",
+            "turnos": list(turnos.values())
         }
 
     except Exception as e:
@@ -848,3 +1001,4 @@ def obtener_resumen_por_fecha(fecha: int):
     finally:
         cur.close()
         conn.close()
+

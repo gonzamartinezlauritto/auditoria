@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 import subprocess
 
 from app.database import get_connection
@@ -114,10 +115,15 @@ def process_exp_fast(file_path: Path, fecha: int, turno: str):
     archivo_origen = file_path.name
     turno = turno.upper().strip()
 
+    tiempos = {}
+    total_inicio = time.time()
+
     conn = get_connection()
     cur = conn.cursor()
 
     try:
+        t = time.time()
+
         cur.execute("""
             CREATE TEMP TABLE quiniela_exp_tmp (
                 n_apues BIGINT,
@@ -141,6 +147,8 @@ def process_exp_fast(file_path: Path, fecha: int, turno: str):
                 n_codext INTEGER
             ) ON COMMIT DROP;
         """)
+
+        tiempos["crear_tmp_segundos"] = round(time.time() - t, 2)
 
         copy_tmp_sql = """
             COPY quiniela_exp_tmp (
@@ -172,8 +180,14 @@ def process_exp_fast(file_path: Path, fecha: int, turno: str):
             )
         """
 
+        t = time.time()
+
         with file_path.open("r", encoding="utf-8", newline="") as file:
             cur.copy_expert(copy_tmp_sql, file)
+
+        tiempos["copy_tmp_segundos"] = round(time.time() - t, 2)
+
+        t = time.time()
 
         cur.execute("""
             INSERT INTO quiniela_exp (
@@ -226,6 +240,9 @@ def process_exp_fast(file_path: Path, fecha: int, turno: str):
         """, (archivo_origen,))
 
         insertados = cur.rowcount
+        tiempos["insert_real_segundos"] = round(time.time() - t, 2)
+
+        t = time.time()
 
         cur.execute("""
             SELECT COUNT(*)
@@ -233,7 +250,11 @@ def process_exp_fast(file_path: Path, fecha: int, turno: str):
         """)
         total_archivo = cur.fetchone()[0] or 0
 
+        tiempos["count_tmp_segundos"] = round(time.time() - t, 2)
+
         ignorados = total_archivo - insertados
+
+        t = time.time()
 
         cur.execute("""
             INSERT INTO cargas_exp (
@@ -245,6 +266,10 @@ def process_exp_fast(file_path: Path, fecha: int, turno: str):
             DO UPDATE SET fecha_carga = NOW()
         """, (archivo_origen, fecha))
 
+        tiempos["registrar_carga_segundos"] = round(time.time() - t, 2)
+
+        t = time.time()
+
         cur.execute("""
             SELECT COUNT(*)
             FROM quiniela_exp
@@ -254,12 +279,18 @@ def process_exp_fast(file_path: Path, fecha: int, turno: str):
 
         cargados_turno = cur.fetchone()[0] or 0
 
+        tiempos["validar_turno_segundos"] = round(time.time() - t, 2)
+
         if cargados_turno == 0:
             raise Exception(
                 f"El archivo se cargó, pero no hay datos para fecha={fecha}, turno={turno}"
             )
 
+        t = time.time()
         conn.commit()
+        tiempos["commit_segundos"] = round(time.time() - t, 2)
+
+        tiempos["total_service_segundos"] = round(time.time() - total_inicio, 2)
 
         return {
             "ok": True,
@@ -270,16 +301,21 @@ def process_exp_fast(file_path: Path, fecha: int, turno: str):
             "insertados": insertados,
             "ignorados_por_duplicado": ignorados,
             "cargados_turno": cargados_turno,
-            "modo": "copy_tmp_insert_on_conflict_do_nothing"
+            "modo": "copy_tmp_insert_on_conflict_do_nothing",
+            "tiempos_service": tiempos,
         }
 
     except Exception as e:
         conn.rollback()
+        tiempos["total_service_segundos"] = round(time.time() - total_inicio, 2)
+
         return {
             "ok": False,
-            "error": str(e)
+            "error": str(e),
+            "tiempos_service": tiempos,
         }
 
     finally:
         cur.close()
         conn.close()
+

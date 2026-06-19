@@ -162,7 +162,7 @@ def main() -> None:
             cur,
             fecha,
             turno
-        )
+        ) 
 
         if total_cargado == 0:
             raise Exception(
