@@ -1,5 +1,5 @@
 from decimal import Decimal, ROUND_HALF_UP
-
+from app.services.auditoria_estado_service import marcar_calculo_ejecutado
 from app.database import get_connection
 
 def obtener_extractos_del_turno(cur, fecha: int, turno: str):
@@ -14,6 +14,36 @@ def obtener_extractos_del_turno(cur, fecha: int, turno: str):
     """, (fecha, turno.upper()))
 
     return [row[0] for row in cur.fetchall()]
+
+def validar_precondiciones_calculo(conn, fecha: int, turno: str):
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            exp_cargado,
+            resultados_cargados,
+            dbf_cargado
+        FROM auditoria_cargas
+        WHERE fecha_sorteo = %s
+          AND turno = %s
+    """, (fecha, turno))
+
+    row = cur.fetchone()
+    cur.close()
+
+    if not row:
+        raise Exception(f"No hay cargas registradas para fecha={fecha}, turno={turno}")
+
+    exp_cargado, resultados_cargados, dbf_cargado = row
+
+    if not exp_cargado:
+        raise Exception(f"No se puede calcular: falta cargar el EXP para fecha={fecha}, turno={turno}")
+
+    if not resultados_cargados:
+        raise Exception(f"No se puede calcular: faltan cargar los resultados para fecha={fecha}, turno={turno}")
+
+    if not dbf_cargado:
+        raise Exception(f"No se puede calcular: falta cargar el DBF de aciertos para fecha={fecha}, turno={turno}")
 
 
 def redondear_a_diez_centavos(valor):
@@ -742,7 +772,6 @@ def calcular_extracto(conn, fecha, turno, cod):
         "archivo_aciertos_dbf": archivo_aciertos_dbf,
     }
 
-
 def guardar_resumen_auditoria(
     conn,
     fecha,
@@ -827,7 +856,8 @@ def calcular_por_fecha_turno(fecha: int, turno: str):
     conn = get_connection()
 
     try:
-
+        
+        validar_precondiciones_calculo(conn, fecha, turno)
         reportes = []
 
         cur = conn.cursor()
@@ -869,6 +899,12 @@ def calcular_por_fecha_turno(fecha: int, turno: str):
             reportes=reportes,
             cupones_ganadores_unicos=cupones_ganadores_unicos,
             cupones_ganadores_dbf=cupones_ganadores_dbf,
+        )
+
+        marcar_calculo_ejecutado(
+            conn=conn,
+            fecha=fecha,
+            turno=turno,
         )
 
         conn.commit()

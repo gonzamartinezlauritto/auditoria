@@ -2,6 +2,7 @@ import shutil
 import time
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from app.services.exp_service import process_exp, process_exp_fast
+from app.services.zip_service import extraer_quiniela_exp_desde_zip
 
 from app.config import UPLOADS_DIR
 
@@ -83,3 +84,52 @@ async def process_uploaded_exp(
 
     return resultado
 
+@router.post("/process-zip")
+async def process_exp_zip(
+    fecha: int,
+    turno: str,
+    file: UploadFile = File(...)
+):
+    start_total = time.time()
+
+    turno = turno.upper().strip()
+
+    if not file.filename.lower().endswith(".zip"):
+        raise HTTPException(
+            status_code=400,
+            detail="El archivo debe ser ZIP"
+        )
+
+    extract_dir = UPLOADS_DIR / str(fecha) / turno / "exp"
+    extract_dir.mkdir(parents=True, exist_ok=True)
+
+    zip_path = extract_dir / file.filename
+
+    with zip_path.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    exp_path = extraer_quiniela_exp_desde_zip(
+        zip_path=zip_path,
+        destino_dir=extract_dir
+    )
+
+    resultado = process_exp_fast(
+        file_path=exp_path,
+        fecha=fecha,
+        turno=turno
+    )
+
+    resultado["zip"] = {
+        "archivo_zip": file.filename,
+        "path_zip": str(zip_path),
+        "archivo_exp": exp_path.name,
+        "path_exp": str(exp_path),
+        "carpeta": str(extract_dir),
+    }
+
+    resultado["tiempo_total_zip"] = round(
+        time.time() - start_total,
+        2
+    )
+
+    return resultado

@@ -3,6 +3,7 @@ import time
 import subprocess
 
 from app.database import get_connection
+from app.services.auditoria_estado_service import marcar_exp_cargado
 
 COPY_SQL = """
 COPY quiniela_exp (
@@ -287,6 +288,14 @@ def process_exp_fast(file_path: Path, fecha: int, turno: str):
             )
 
         t = time.time()
+
+        marcar_exp_cargado(
+        conn=conn,
+        fecha=fecha,
+        turno=turno,
+        archivo_exp=archivo_origen
+        )
+
         conn.commit()
         tiempos["commit_segundos"] = round(time.time() - t, 2)
 

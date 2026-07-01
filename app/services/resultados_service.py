@@ -1,5 +1,5 @@
 from app.database import get_connection
-
+from app.services.auditoria_estado_service import marcar_resultados_cargados
 
 def normalizar_numero(numero: str) -> str:
     return str(numero).strip().zfill(4)
@@ -49,6 +49,11 @@ def cargar_resultados(fecha: int, turno: str, resultados: list):
 
                 total_insertados += 1
 
+        marcar_resultados_cargados(
+            conn=conn,
+            fecha=fecha,
+            turno=turno
+        )
         conn.commit()
 
         return {
