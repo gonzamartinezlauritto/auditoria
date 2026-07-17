@@ -5,7 +5,13 @@ from app.routers.exp_router import router as exp_router
 from app.routers.dbf_router import router as dbf_router
 from app.routers.calculo_router import router as calculo_router
 from app.routers.resultados_router import router as resultados_router
-from app.routers import auditoria_router
+from app.routers.auth_router import router as auth_router
+from app.routers.auditoria_router import router as auditoria_router
+from app.routers.users_router import router as users_router
+
+from app.exceptions.base import AppException
+from app.exceptions.handlers import app_exception_handler
+
 
 app = FastAPI(
     title="Auditoría Quiniela API",
@@ -20,11 +26,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_exception_handler(
+    AppException,
+    app_exception_handler,
+)
+
 app.include_router(exp_router)
 app.include_router(dbf_router)
 app.include_router(calculo_router)
 app.include_router(resultados_router)
-app.include_router(auditoria_router.router)
+app.include_router(auth_router)
+app.include_router(auditoria_router)
+app.include_router(users_router)
+
 
 @app.get("/")
 def health():
