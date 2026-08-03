@@ -1,3 +1,5 @@
+from typing import Any
+from psycopg2.extensions import connection
 from psycopg2 import IntegrityError
 
 from app.constants.roles import OPERADOR, ROLES_VALIDOS
@@ -15,7 +17,60 @@ from app.repositories import user_repository
 from app.security.password import hash_password
 
 
-def validar_rol(rol: str) -> str:
+def _obtener_usuario_o_error(
+    conn: connection,
+    usuario_id: int,
+) -> dict[str, Any]:
+    usuario = user_repository.find_by_id(
+        conn,
+        usuario_id,
+    )
+
+    if not usuario:
+        raise UsuarioNoEncontradoError()
+
+    return usuario
+
+def _normalizar_datos_usuario(
+    username: str,
+    nombre: str,
+    email: str,
+) -> tuple[str, str, str]:
+    return (
+        username.strip(),
+        nombre.strip(),
+        email.lower().strip(),
+    )
+
+def _validar_usuario_duplicado(
+    conn: connection,
+    username: str,
+    email: str,
+    usuario_id: int | None = None,
+) -> None:
+    usuario_username = user_repository.find_by_username(
+        conn,
+        username,
+    )
+
+    if (
+        usuario_username
+        and usuario_username["id"] != usuario_id
+    ):
+        raise UsernameDuplicadoError()
+
+    usuario_email = user_repository.find_by_email(
+        conn,
+        email,
+    )
+
+    if (
+        usuario_email
+        and usuario_email["id"] != usuario_id
+    ):
+        raise EmailDuplicadoError()
+
+def _validar_rol(rol: str) -> str:
     rol_normalizado = rol.lower().strip()
 
     if rol_normalizado not in ROLES_VALIDOS:
@@ -33,29 +88,13 @@ def crear_usuario(
     email: str,
     password: str,
     rol: str = OPERADOR,
-):
-    username = username.strip()
-    nombre = nombre.strip()
-    email = email.lower().strip()
-    rol = validar_rol(rol)
+) -> dict[str, Any]:
+    username, nombre, email = _normalizar_datos_usuario(username, nombre, email)
+    rol = _validar_rol(rol)
 
     try:
         with transaction() as conn:
-            usuario_existente = user_repository.find_by_username(
-                conn,
-                username,
-            )
-
-            if usuario_existente:
-                raise UsernameDuplicadoError()
-
-            email_existente = user_repository.find_by_email(
-                conn,
-                email,
-            )
-
-            if email_existente:
-                raise EmailDuplicadoError()
+            _validar_usuario_duplicado(conn=conn,username=username,email=email)
 
             usuario = user_repository.insert_usuario(
                 conn=conn,
@@ -96,7 +135,7 @@ def crear_usuario(
         ) from error
 
 
-def listar_usuarios():
+def listar_usuarios() -> list[dict[str, Any]]:
     try:
         with transaction() as conn:
             return user_repository.find_all(conn)
@@ -105,24 +144,21 @@ def listar_usuarios():
         raise
 
     except Exception as error:
-        logger.exception("Error inesperado al listar usuarios")
+        logger.exception(
+            "Error inesperado al listar usuarios"
+        )
         raise InternalServerError(
             "Error interno al listar los usuarios"
         ) from error
 
 
-def obtener_usuario_por_id(usuario_id: int):
+def obtener_usuario_por_id(usuario_id: int) -> dict[str, Any]:
     try:
         with transaction() as conn:
-            usuario = user_repository.find_by_id(
+            return _obtener_usuario_o_error(
                 conn,
                 usuario_id,
             )
-
-            if not usuario:
-                raise UsuarioNoEncontradoError()
-
-            return usuario
 
     except AppException:
         raise
@@ -143,43 +179,18 @@ def actualizar_usuario(
     nombre: str,
     email: str,
     rol: str,
-):
-    username = username.strip()
-    nombre = nombre.strip()
-    email = email.lower().strip()
-    rol = validar_rol(rol)
+) -> dict[str, Any]:
+    username, nombre, email = _normalizar_datos_usuario(username, nombre, email)
+    rol = _validar_rol(rol)
 
     try:
         with transaction() as conn:
-            usuario_actual = user_repository.find_by_id(
+            _obtener_usuario_o_error(
                 conn,
                 usuario_id,
             )
 
-            if not usuario_actual:
-                raise UsuarioNoEncontradoError()
-
-            usuario_username = user_repository.find_by_username(
-                conn,
-                username,
-            )
-
-            if (
-                usuario_username
-                and usuario_username["id"] != usuario_id
-            ):
-                raise UsernameDuplicadoError()
-
-            usuario_email = user_repository.find_by_email(
-                conn,
-                email,
-            )
-
-            if (
-                usuario_email
-                and usuario_email["id"] != usuario_id
-            ):
-                raise EmailDuplicadoError()
+            _validar_usuario_duplicado(conn=conn,username=username,email=email)
 
             usuario = user_repository.update_usuario(
                 conn=conn,
@@ -226,25 +237,19 @@ def actualizar_usuario(
 def cambiar_password(
     usuario_id: int,
     nueva_password: str,
-):
+) -> dict[str, Any]:
     try:
         with transaction() as conn:
-            usuario = user_repository.find_by_id(
+            _obtener_usuario_o_error(
                 conn,
                 usuario_id,
             )
 
-            if not usuario:
-                raise UsuarioNoEncontradoError()
-
-            actualizado = user_repository.update_password(
+            user_repository.update_password(
                 conn=conn,
                 usuario_id=usuario_id,
                 password_hash=hash_password(nueva_password),
             )
-
-            if not actualizado:
-                raise UsuarioNoEncontradoError()
 
         logger.info(
             "Contraseña actualizada correctamente: usuario_id=%s",
@@ -271,17 +276,19 @@ def cambiar_password(
 def cambiar_estado_usuario(
     usuario_id: int,
     activo: bool,
-):
+) -> dict[str, Any]:
     try:
         with transaction() as conn:
+            _obtener_usuario_o_error(
+                conn,
+                usuario_id,
+            )
+
             usuario = user_repository.update_estado(
                 conn=conn,
                 usuario_id=usuario_id,
                 activo=activo,
             )
-
-            if not usuario:
-                raise UsuarioNoEncontradoError()
 
         logger.info(
             "Estado de usuario actualizado: "
@@ -305,16 +312,18 @@ def cambiar_estado_usuario(
         ) from error
 
 
-def eliminar_usuario(usuario_id: int):
+def eliminar_usuario(usuario_id: int) -> dict[str, Any]:
     try:
         with transaction() as conn:
-            usuario_eliminado = user_repository.delete_usuario(
+            _obtener_usuario_o_error(
                 conn,
                 usuario_id,
             )
 
-            if not usuario_eliminado:
-                raise UsuarioNoEncontradoError()
+            user_repository.delete_usuario(
+                conn,
+                usuario_id,
+            )
 
         logger.info(
             "Usuario eliminado correctamente: id=%s",

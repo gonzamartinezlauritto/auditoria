@@ -1,19 +1,20 @@
-from pydantic import BaseModel
 from fastapi import APIRouter
 
-from app.services.auth_service import login
 from app.schemas.auth_schema import LoginRequest
+from app.services.auth_service import login
 
 
 router = APIRouter(
     prefix="/auth",
-    tags=["Auth"]
+    tags=["Auth"],
 )
 
 
 @router.post("/login")
-def login_usuario(data: LoginRequest):
+def login_usuario(
+    data: LoginRequest,
+):
     return login(
         usuario=data.usuario,
-        password=data.password
+        password=data.password,
     )

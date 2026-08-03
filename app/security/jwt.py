@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
 import os
+from typing import Any
 
 from jose import JWTError, jwt
+
+from app.exceptions.security_exceptions import TokenInvalidoError
 
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
@@ -17,11 +20,13 @@ if not SECRET_KEY:
     )
 
 
-def create_access_token(data: dict) -> str:
+def create_access_token(
+    data: dict[str, Any],
+) -> str:
     payload = data.copy()
 
     expiration = datetime.now(timezone.utc) + timedelta(
-        minutes=EXPIRE_MINUTES
+        minutes=EXPIRE_MINUTES,
     )
 
     payload.update({
@@ -35,7 +40,9 @@ def create_access_token(data: dict) -> str:
     )
 
 
-def decode_access_token(token: str) -> dict:
+def decode_access_token(
+    token: str,
+) -> dict[str, Any]:
     try:
         return jwt.decode(
             token,
@@ -44,6 +51,4 @@ def decode_access_token(token: str) -> dict:
         )
 
     except JWTError as error:
-        raise ValueError(
-            "Token inválido o expirado"
-        ) from error
+        raise TokenInvalidoError() from error

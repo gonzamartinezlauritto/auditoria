@@ -22,3 +22,11 @@ class CambiarPasswordRequest(BaseModel):
 
 class CambiarEstadoRequest(BaseModel):
     activo: bool
+
+class CurrentUser(BaseModel):
+    id: int
+    username: str
+    nombre: str
+    email: str
+    rol: str
+    activo: bool

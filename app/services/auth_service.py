@@ -1,4 +1,7 @@
+from typing import Any
+
 from app.core.transaction import transaction
+from app.exceptions.security_exceptions import TokenInvalidoError
 from app.exceptions.user_exceptions import (
     CredencialesInvalidasError,
     UsuarioInactivoError,
@@ -8,7 +11,10 @@ from app.security.jwt import create_access_token
 from app.security.password import verify_password
 
 
-def login(usuario: str, password: str):
+def login(
+    usuario: str,
+    password: str,
+) -> dict[str, Any]:
     usuario_normalizado = usuario.strip()
 
     with transaction() as conn:
@@ -46,3 +52,23 @@ def login(usuario: str, password: str):
             "rol": user["rol"],
         },
     }
+
+
+def obtener_usuario_autenticado(
+    usuario_id: int,
+) -> dict[str, Any]:
+    with transaction() as conn:
+        user = user_repository.find_by_id(
+            conn,
+            usuario_id,
+        )
+
+        if not user:
+            raise TokenInvalidoError(
+                "El usuario asociado al token ya no existe"
+            )
+
+        if not user["activo"]:
+            raise UsuarioInactivoError()
+
+        return user
