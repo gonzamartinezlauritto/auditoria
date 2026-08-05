@@ -1,330 +1,356 @@
 from pathlib import Path
+from typing import Any
 import time
-import subprocess
 
-from app.database import get_connection
+from fastapi import UploadFile
+
+from app.config import UPLOADS_DIR
+from app.core.logger import logger
+from app.core.transaction import transaction
+from app.exceptions.base import AppException
+from app.exceptions.exp_exceptions import (
+    ErrorProcesamientoExp,
+    SinApuestasParaTurnoError,
+)
+from app.repositories import exp_repository
 from app.services.auditoria_estado_service import marcar_exp_cargado
-
-COPY_SQL = """
-COPY quiniela_exp (
-    n_apues,
-    n_maqre,
-    n_agent,
-    n_subag,
-    n_maqui,
-    n_cupon,
-    n_linea,
-    n_femis,
-    c_hemis,
-    c_ecupon,
-    n_fsorteo,
-    n_codlot,
-    c_tsorteo,
-    n_alcdes,
-    n_alchas,
-    c_nroapos,
-    n_impapos,
-    n_nodef,
-    n_codext
+from app.services.file_service import (
+    guardar_upload,
+    obtener_nombre_seguro,
+    validar_extension_exp,
+    validar_extension_zip,
 )
-FROM STDIN
-WITH (
-    FORMAT csv,
-    DELIMITER ',',
-    QUOTE '"'
+from app.services.zip_service import (
+    extraer_quiniela_exp_desde_zip,
 )
-"""
 
-def process_exp(file_path: Path, fecha: int, turno: str):
 
-    pasos = []
-    turno = turno.upper()
+def subir_archivo_exp(
+    file: UploadFile,
+) -> dict[str, Any]:
+    nombre_archivo = obtener_nombre_seguro(file)
+    validar_extension_exp(nombre_archivo)
 
-    try:
+    file_path = guardar_upload(
+        file=file,
+        destino=UPLOADS_DIR / nombre_archivo,
+    )
 
-        subprocess.run(
-            ["python", "load_exp_raw.py", str(file_path)],
-            check=True
-        )
-        pasos.append("load_exp_raw OK")
+    return {
+        "message": "Archivo EXP subido correctamente",
+        "filename": nombre_archivo,
+        "path": str(file_path),
+        "size_bytes": file_path.stat().st_size,
+    }
 
-        subprocess.run(
-            ["python", "process_exp.py"],
-            check=True
-        )
-        pasos.append("process_exp OK")
 
-        subprocess.run(
-            ["python", "load_quiniela.py", str(file_path), str(fecha), turno],
-            check=True
-        )
-        pasos.append("load_quiniela OK")
+def procesar_archivo_exp(
+    file: UploadFile,
+    fecha: int,
+    turno: str,
+) -> dict[str, Any]:
+    inicio_total = time.perf_counter()
 
-        # =====================================
-        # VALIDAR CARGA POR FECHA + TURNO
-        # =====================================
+    nombre_archivo = obtener_nombre_seguro(file)
+    validar_extension_exp(nombre_archivo)
 
-        conn = get_connection()
-        cur = conn.cursor()
+    turno_normalizado = turno.upper().strip()
 
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM quiniela_exp
-            WHERE n_fsorteo = %s
-              AND c_tsorteo = %s
-        """, (fecha, turno))
+    inicio_guardado = time.perf_counter()
 
-        cantidad = cur.fetchone()[0] or 0
+    file_path = guardar_upload(
+        file=file,
+        destino=UPLOADS_DIR / nombre_archivo,
+    )
 
-        cur.close()
-        conn.close()
+    tiempo_guardado = (
+        time.perf_counter() - inicio_guardado
+    )
 
-        if cantidad == 0:
-            return {
-                "ok": False,
-                "pasos": pasos,
-                "error": f"No se encontraron apuestas para fecha {fecha} y turno {turno}. Verificar archivo EXP."
-            }
+    inicio_procesamiento = time.perf_counter()
 
-        pasos.append("validacion fecha/turno OK")
-
-        return {
-            "ok": True,
-            "fecha": fecha,
-            "turno": turno,
-            "apuestas_cargadas": cantidad,
-            "pasos": pasos
-        }
-
-    except subprocess.CalledProcessError as e:
-
-        return {
-            "ok": False,
-            "error": str(e),
-            "pasos": pasos
-        }
-
-    except Exception as e:
-
-        return {
-            "ok": False,
-            "error": str(e),
-            "pasos": pasos
-        }
-
-def process_exp_fast(file_path: Path, fecha: int, turno: str):
-    archivo_origen = file_path.name
-    turno = turno.upper().strip()
-
-    tiempos = {}
-    total_inicio = time.time()
-
-    conn = get_connection()
-    cur = conn.cursor()
-
-    try:
-        t = time.time()
-
-        cur.execute("""
-            CREATE TEMP TABLE quiniela_exp_tmp (
-                n_apues BIGINT,
-                n_maqre BIGINT,
-                n_agent INTEGER,
-                n_subag INTEGER,
-                n_maqui INTEGER,
-                n_cupon BIGINT,
-                n_linea INTEGER,
-                n_femis INTEGER,
-                c_hemis TIME,
-                c_ecupon VARCHAR(10),
-                n_fsorteo INTEGER,
-                n_codlot INTEGER,
-                c_tsorteo VARCHAR(10),
-                n_alcdes INTEGER,
-                n_alchas INTEGER,
-                c_nroapos VARCHAR(20),
-                n_impapos NUMERIC(18,2),
-                n_nodef INTEGER,
-                n_codext INTEGER
-            ) ON COMMIT DROP;
-        """)
-
-        tiempos["crear_tmp_segundos"] = round(time.time() - t, 2)
-
-        copy_tmp_sql = """
-            COPY quiniela_exp_tmp (
-                n_apues,
-                n_maqre,
-                n_agent,
-                n_subag,
-                n_maqui,
-                n_cupon,
-                n_linea,
-                n_femis,
-                c_hemis,
-                c_ecupon,
-                n_fsorteo,
-                n_codlot,
-                c_tsorteo,
-                n_alcdes,
-                n_alchas,
-                c_nroapos,
-                n_impapos,
-                n_nodef,
-                n_codext
-            )
-            FROM STDIN
-            WITH (
-                FORMAT csv,
-                DELIMITER ',',
-                QUOTE '"'
-            )
-        """
-
-        t = time.time()
-
-        with file_path.open("r", encoding="utf-8", newline="") as file:
-            cur.copy_expert(copy_tmp_sql, file)
-
-        tiempos["copy_tmp_segundos"] = round(time.time() - t, 2)
-
-        t = time.time()
-
-        cur.execute("""
-            INSERT INTO quiniela_exp (
-                n_apues,
-                n_maqre,
-                n_agent,
-                n_subag,
-                n_maqui,
-                n_cupon,
-                n_linea,
-                n_femis,
-                c_hemis,
-                c_ecupon,
-                n_fsorteo,
-                n_codlot,
-                c_tsorteo,
-                n_alcdes,
-                n_alchas,
-                c_nroapos,
-                n_impapos,
-                n_nodef,
-                n_codext,
-                archivo_origen,
-                fecha_carga
-            )
-            SELECT
-                n_apues,
-                n_maqre,
-                n_agent,
-                n_subag,
-                n_maqui,
-                n_cupon,
-                n_linea,
-                n_femis,
-                c_hemis,
-                c_ecupon,
-                n_fsorteo,
-                n_codlot,
-                TRIM(c_tsorteo),
-                n_alcdes,
-                n_alchas,
-                c_nroapos,
-                n_impapos,
-                n_nodef,
-                n_codext,
-                %s,
-                NOW()
-            FROM quiniela_exp_tmp
-            ON CONFLICT DO NOTHING
-        """, (archivo_origen,))
-
-        insertados = cur.rowcount
-        tiempos["insert_real_segundos"] = round(time.time() - t, 2)
-
-        t = time.time()
-
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM quiniela_exp_tmp
-        """)
-        total_archivo = cur.fetchone()[0] or 0
-
-        tiempos["count_tmp_segundos"] = round(time.time() - t, 2)
-
-        ignorados = total_archivo - insertados
-
-        t = time.time()
-
-        cur.execute("""
-            INSERT INTO cargas_exp (
-                archivo_origen,
-                fecha_archivo
-            )
-            VALUES (%s, %s)
-            ON CONFLICT (archivo_origen)
-            DO UPDATE SET fecha_carga = NOW()
-        """, (archivo_origen, fecha))
-
-        tiempos["registrar_carga_segundos"] = round(time.time() - t, 2)
-
-        t = time.time()
-
-        cur.execute("""
-            SELECT COUNT(*)
-            FROM quiniela_exp
-            WHERE n_fsorteo = %s
-              AND TRIM(c_tsorteo) = %s
-        """, (fecha, turno))
-
-        cargados_turno = cur.fetchone()[0] or 0
-
-        tiempos["validar_turno_segundos"] = round(time.time() - t, 2)
-
-        if cargados_turno == 0:
-            raise Exception(
-                f"El archivo se cargó, pero no hay datos para fecha={fecha}, turno={turno}"
-            )
-
-        t = time.time()
-
-        marcar_exp_cargado(
-        conn=conn,
+    resultado = process_exp_fast(
+        file_path=file_path,
         fecha=fecha,
-        turno=turno,
-        archivo_exp=archivo_origen
+        turno=turno_normalizado,
+    )
+
+    tiempo_procesamiento = (
+        time.perf_counter() - inicio_procesamiento
+    )
+
+    resultado["archivo"] = {
+        "filename": nombre_archivo,
+        "path": str(file_path),
+        "size_bytes": file_path.stat().st_size,
+    }
+
+    resultado["tiempos_orquestacion"] = {
+        "guardar_archivo_segundos": round(
+            tiempo_guardado,
+            2,
+        ),
+        "procesar_exp_segundos": round(
+            tiempo_procesamiento,
+            2,
+        ),
+        "total_segundos": round(
+            time.perf_counter() - inicio_total,
+            2,
+        ),
+    }
+
+    return resultado
+
+
+def procesar_archivo_exp_zip(
+    file: UploadFile,
+    fecha: int,
+    turno: str,
+) -> dict[str, Any]:
+    inicio_total = time.perf_counter()
+
+    nombre_archivo = obtener_nombre_seguro(file)
+    validar_extension_zip(nombre_archivo)
+
+    turno_normalizado = turno.upper().strip()
+
+    extract_dir = (
+        UPLOADS_DIR
+        / str(fecha)
+        / turno_normalizado
+        / "exp"
+    )
+
+    zip_path = guardar_upload(
+        file=file,
+        destino=extract_dir / nombre_archivo,
+    )
+
+    exp_path = extraer_quiniela_exp_desde_zip(
+        zip_path=zip_path,
+        destino_dir=extract_dir,
+    )
+
+    resultado = process_exp_fast(
+        file_path=exp_path,
+        fecha=fecha,
+        turno=turno_normalizado,
+    )
+
+    resultado["zip"] = {
+        "archivo_zip": nombre_archivo,
+        "path_zip": str(zip_path),
+        "archivo_exp": exp_path.name,
+        "path_exp": str(exp_path),
+        "carpeta": str(extract_dir),
+    }
+
+    resultado["tiempo_total_zip"] = round(
+        time.perf_counter() - inicio_total,
+        2,
+    )
+
+    return resultado
+
+
+def process_exp_fast(
+    file_path: Path,
+    fecha: int,
+    turno: str,
+) -> dict[str, Any]:
+    archivo_origen = file_path.name
+    turno_normalizado = turno.upper().strip()
+
+    tiempos: dict[str, float] = {}
+    total_inicio = time.perf_counter()
+
+    try:
+        with transaction() as conn:
+            inicio = time.perf_counter()
+
+            exp_repository.crear_tabla_temporal(
+                conn=conn,
+            )
+
+            tiempos["crear_tmp_segundos"] = round(
+                time.perf_counter() - inicio,
+                2,
+            )
+
+            inicio = time.perf_counter()
+
+            exp_repository.copiar_archivo_a_temporal(
+                conn=conn,
+                file_path=file_path,
+            )
+
+            tiempos["copy_tmp_segundos"] = round(
+                time.perf_counter() - inicio,
+                2,
+            )
+
+            inicio = time.perf_counter()
+
+            total_archivo = (
+                exp_repository.contar_total_temporal(
+                    conn=conn,
+                )
+            )
+
+            total_turnos_validos = (
+                exp_repository.contar_turnos_validos_temporal(
+                    conn=conn,
+                )
+            )
+
+            turnos_ignorados = (
+                exp_repository.obtener_turnos_ignorados(
+                    conn=conn,
+                )
+            )
+
+            tiempos["analizar_tmp_segundos"] = round(
+                time.perf_counter() - inicio,
+                2,
+            )
+
+            inicio = time.perf_counter()
+
+            insertados = (
+                exp_repository.insertar_apuestas_validas(
+                    conn=conn,
+                    archivo_origen=archivo_origen,
+                )
+            )
+
+            tiempos["insert_real_segundos"] = round(
+                time.perf_counter() - inicio,
+                2,
+            )
+
+            ignorados_turno_invalido = (
+                total_archivo
+                - total_turnos_validos
+            )
+
+            ignorados_por_duplicado = max(
+                total_turnos_validos
+                - insertados,
+                0,
+            )
+
+            inicio = time.perf_counter()
+
+            exp_repository.registrar_carga(
+                conn=conn,
+                archivo_origen=archivo_origen,
+                fecha=fecha,
+            )
+
+            tiempos["registrar_carga_segundos"] = round(
+                time.perf_counter() - inicio,
+                2,
+            )
+
+            inicio = time.perf_counter()
+
+            cargados_turno = (
+                exp_repository.contar_apuestas_por_fecha_turno(
+                    conn=conn,
+                    fecha=fecha,
+                    turno=turno_normalizado,
+                )
+            )
+
+            tiempos["validar_turno_segundos"] = round(
+                time.perf_counter() - inicio,
+                2,
+            )
+
+            if cargados_turno == 0:
+                raise SinApuestasParaTurnoError(
+                    "El archivo fue leído correctamente, "
+                    "pero no contiene apuestas para "
+                    f"fecha={fecha} y "
+                    f"turno={turno_normalizado}"
+                )
+
+            inicio = time.perf_counter()
+
+            marcar_exp_cargado(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+                archivo_exp=archivo_origen,
+            )
+
+            tiempos["marcar_exp_segundos"] = round(
+                time.perf_counter() - inicio,
+                2,
+            )
+
+        tiempos["total_service_segundos"] = round(
+            time.perf_counter() - total_inicio,
+            2,
         )
 
-        conn.commit()
-        tiempos["commit_segundos"] = round(time.time() - t, 2)
-
-        tiempos["total_service_segundos"] = round(time.time() - total_inicio, 2)
+        logger.info(
+            "Archivo EXP procesado: "
+            "archivo=%s fecha=%s turno=%s "
+            "total=%s insertados=%s "
+            "turnos_invalidos=%s duplicados=%s",
+            archivo_origen,
+            fecha,
+            turno_normalizado,
+            total_archivo,
+            insertados,
+            ignorados_turno_invalido,
+            ignorados_por_duplicado,
+        )
 
         return {
             "ok": True,
             "archivo_origen": archivo_origen,
             "fecha": fecha,
-            "turno": turno,
+            "turno": turno_normalizado,
             "total_archivo": total_archivo,
+            "total_turnos_validos": (
+                total_turnos_validos
+            ),
             "insertados": insertados,
-            "ignorados_por_duplicado": ignorados,
+            "ignorados_turno_invalido": (
+                ignorados_turno_invalido
+            ),
+            "ignorados_por_duplicado": (
+                ignorados_por_duplicado
+            ),
+            "turnos_ignorados": turnos_ignorados,
             "cargados_turno": cargados_turno,
-            "modo": "copy_tmp_insert_on_conflict_do_nothing",
+            "modo": (
+                "copy_tmp_filter_valid_turns_"
+                "insert_on_conflict_do_nothing"
+            ),
             "tiempos_service": tiempos,
         }
 
-    except Exception as e:
-        conn.rollback()
-        tiempos["total_service_segundos"] = round(time.time() - total_inicio, 2)
+    except AppException:
+        raise
 
-        return {
-            "ok": False,
-            "error": str(e),
-            "tiempos_service": tiempos,
-        }
+    except Exception as error:
+        tiempos["total_service_segundos"] = round(
+            time.perf_counter() - total_inicio,
+            2,
+        )
 
-    finally:
-        cur.close()
-        conn.close()
+        logger.exception(
+            "Error al procesar archivo EXP: "
+            "archivo=%s fecha=%s turno=%s",
+            archivo_origen,
+            fecha,
+            turno_normalizado,
+        )
 
+        raise ErrorProcesamientoExp(
+            "Error al procesar el archivo EXP"
+        ) from error
