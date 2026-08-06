@@ -1,18 +1,21 @@
-from typing import List
-from pydantic import BaseModel
-from fastapi import APIRouter
+from typing import Annotated
 
-from app.services.resultados_service import cargar_resultados,obtener_resultados_por_fecha
+from fastapi import APIRouter, Depends
 
-class ResultadoExtractoRequest(BaseModel):
-    codigo_extracto: int
-    numeros: List[str]
-
-
-class CargarResultadosRequest(BaseModel):
-    fecha: int
-    turno: str
-    resultados: List[ResultadoExtractoRequest]
+from app.constants.roles import (
+    ADMIN,
+    CONSULTA,
+    OPERADOR,
+)
+from app.schemas.resultados_schema import (
+    CargarResultadosRequest,
+)
+from app.schemas.user_schema import CurrentUser
+from app.security.dependencies import require_role
+from app.services.resultados_service import (
+    cargar_resultados,
+    obtener_resultados_por_fecha,
+)
 
 
 router = APIRouter(
@@ -22,7 +25,18 @@ router = APIRouter(
 
 
 @router.post("/cargar")
-def cargar_resultados_endpoint(body: CargarResultadosRequest):
+def cargar_resultados_endpoint(
+    body: CargarResultadosRequest,
+    _usuario_actual: Annotated[
+        CurrentUser,
+        Depends(
+            require_role(
+                ADMIN,
+                OPERADOR,
+            )
+        ),
+    ],
+):
     resultados = [
         item.model_dump()
         for item in body.resultados
@@ -34,6 +48,21 @@ def cargar_resultados_endpoint(body: CargarResultadosRequest):
         resultados=resultados,
     )
 
+
 @router.get("")
-def listar_resultados(fecha: int):
-    return obtener_resultados_por_fecha(fecha)
+def listar_resultados(
+    fecha: int,
+    _usuario_actual: Annotated[
+        CurrentUser,
+        Depends(
+            require_role(
+                ADMIN,
+                OPERADOR,
+                CONSULTA,
+            )
+        ),
+    ],
+):
+    return obtener_resultados_por_fecha(
+        fecha=fecha,
+    )
