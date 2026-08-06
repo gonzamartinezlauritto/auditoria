@@ -1,84 +1,62 @@
-import shutil
-from fastapi import APIRouter, UploadFile, File, HTTPException
-import time
+from typing import Annotated
 
-from app.config import UPLOADS_DIR
-from app.services.dbf_service import process_dbf
-from app.services.zip_service import extraer_dbf_desde_zip
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    UploadFile,
+)
+
+from app.constants.roles import ADMIN, OPERADOR
+from app.schemas.user_schema import CurrentUser
+from app.security.dependencies import require_role
+from app.services.dbf_service import (
+    procesar_archivo_dbf,
+    procesar_archivo_dbf_zip,
+)
 
 
 router = APIRouter(
     prefix="/dbf",
-    tags=["DBF"]
+    tags=["DBF"],
 )
 
 
 @router.post("/process")
-async def process_uploaded_dbf(
+def process_uploaded_dbf(
     fecha: int,
     turno: str,
-    file: UploadFile = File(...)
+    file: Annotated[
+        UploadFile,
+        File(...),
+    ],
+    _usuario_actual: Annotated[
+        CurrentUser,
+        Depends(require_role(ADMIN, OPERADOR)),
+    ],
 ):
-    file_path = UPLOADS_DIR / file.filename
-
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    resultado = process_dbf(
-        file_path=file_path,
+    return procesar_archivo_dbf(
+        file=file,
         fecha=fecha,
-        turno=turno.upper()
+        turno=turno,
     )
-
-    return resultado
 
 
 @router.post("/process-zip")
-async def process_dbf_zip(
+def process_dbf_zip(
     fecha: int,
     turno: str,
-    file: UploadFile = File(...)
+    file: Annotated[
+        UploadFile,
+        File(...),
+    ],
+    _usuario_actual: Annotated[
+        CurrentUser,
+        Depends(require_role(ADMIN, OPERADOR)),
+    ],
 ):
-    start_total = time.time()
-
-    turno = turno.upper().strip()
-
-    if not file.filename.lower().endswith(".zip"):
-        raise HTTPException(
-            status_code=400,
-            detail="El archivo debe ser ZIP"
-        )
-
-    extract_dir = UPLOADS_DIR / str(fecha) / turno / "dbf"
-    extract_dir.mkdir(parents=True, exist_ok=True)
-
-    zip_path = extract_dir / file.filename
-
-    with zip_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    dbf_path = extraer_dbf_desde_zip(
-        zip_path=zip_path,
-        destino_dir=extract_dir
-    )
-
-    resultado = process_dbf(
-        file_path=dbf_path,
+    return procesar_archivo_dbf_zip(
+        file=file,
         fecha=fecha,
-        turno=turno
+        turno=turno,
     )
-
-    resultado["zip"] = {
-        "archivo_zip": file.filename,
-        "path_zip": str(zip_path),
-        "archivo_dbf": dbf_path.name,
-        "path_dbf": str(dbf_path),
-        "carpeta": str(extract_dir),
-    }
-
-    resultado["tiempo_total_zip"] = round(
-        time.time() - start_total,
-        2
-    )
-
-    return resultado

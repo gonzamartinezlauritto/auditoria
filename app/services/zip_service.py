@@ -18,6 +18,9 @@ from app.exceptions.exp_exceptions import (
     ArchivoZipInvalidoError,
 )
 
+from app.exceptions.dbf_exceptions import (
+    ArchivoDbfNoEncontradoError,
+)
 
 def _seleccionar_archivo_exp(
     archivo_zip: ZipFile,
@@ -132,18 +135,51 @@ def extraer_quiniela_exp_desde_zip(
         raise ArchivoZipInvalidoError() from error
 
 
-def extraer_dbf_desde_zip(zip_path: Path, destino_dir: Path) -> Path:
-    destino_dir.mkdir(parents=True, exist_ok=True)
+def extraer_dbf_desde_zip(
+    zip_path: Path,
+    destino_dir: Path,
+) -> Path:
+    destino_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    with zipfile.ZipFile(zip_path, "r") as z:
-        for nombre in z.namelist():
-            if nombre.lower().endswith(".dbf"):
-                salida = destino_dir / Path(nombre).name
+    try:
+        with ZipFile(zip_path, "r") as archivo_zip:
+            archivos_dbf = [
+                item
+                for item in archivo_zip.infolist()
+                if (
+                    not item.is_dir()
+                    and Path(item.filename).suffix.lower()
+                    == ".dbf"
+                )
+            ]
 
-                with salida.open("wb") as f:
-                    f.write(z.read(nombre))
+            if not archivos_dbf:
+                raise ArchivoDbfNoEncontradoError()
 
-                return salida
+            archivo_dbf = archivos_dbf[0]
+            nombre_salida = Path(
+                archivo_dbf.filename
+            ).name
 
-    raise Exception("No se encontró archivo .dbf dentro del ZIP")
+            if not nombre_salida:
+                raise ArchivoDbfNoEncontradoError()
+
+            dbf_path = destino_dir / nombre_salida
+
+            with archivo_zip.open(
+                archivo_dbf,
+                "r",
+            ) as origen:
+                with dbf_path.open("wb") as destino:
+                    while bloque := origen.read(1024 * 1024):
+                        destino.write(bloque)
+
+            return dbf_path
+
+    except BadZipFile as error:
+        raise ArchivoZipInvalidoError() from error
+
 

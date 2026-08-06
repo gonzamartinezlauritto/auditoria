@@ -8,7 +8,15 @@ from app.exceptions.exp_exceptions import (
     ExtensionZipInvalidaError,
     NombreArchivoInvalidoError,
 )
+from app.exceptions.dbf_exceptions import (
+    ExtensionDbfInvalidaError,
+)
 
+def validar_extension_dbf(
+    nombre_archivo: str,
+) -> None:
+    if not nombre_archivo.lower().endswith(".dbf"):
+        raise ExtensionDbfInvalidaError()
 
 def obtener_nombre_seguro(
     file: UploadFile,
