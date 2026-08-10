@@ -4,36 +4,36 @@ from fastapi import APIRouter, Depends
 
 from app.constants.roles import (
     ADMIN,
-    CONSULTA,
     OPERADOR,
 )
 from app.schemas.user_schema import CurrentUser
 from app.security.dependencies import require_role
-from app.services.auditoria_estado_service import (
-    obtener_estado_por_fecha,
+from app.services.comparacion_service import (
+    comparar_sistema_con_dbf,
 )
 
 
 router = APIRouter(
-    prefix="/auditoria",
-    tags=["Auditoría"],
+    prefix="/comparacion",
+    tags=["Comparación"],
 )
 
 
-@router.get("/estado")
-def estado_auditoria(
+@router.post("/run")
+def ejecutar_comparacion(
     fecha: int,
+    turno: str,
     _usuario_actual: Annotated[
         CurrentUser,
         Depends(
             require_role(
                 ADMIN,
                 OPERADOR,
-                CONSULTA,
             )
         ),
     ],
 ):
-    return obtener_estado_por_fecha(
+    return comparar_sistema_con_dbf(
         fecha=fecha,
+        turno=turno,
     )
