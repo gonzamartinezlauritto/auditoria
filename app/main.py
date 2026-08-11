@@ -9,6 +9,7 @@ from app.routers.auth_router import router as auth_router
 from app.routers.auditoria_router import router as auditoria_router
 from app.routers.users_router import router as users_router
 from app.routers.comparacion_router import router as comparacion_router
+from app.routers.reporte_router import router as reporte_router
 
 from app.exceptions.base import AppException
 from app.exceptions.handlers import app_exception_handler
@@ -40,6 +41,8 @@ app.include_router(auth_router)
 app.include_router(auditoria_router)
 app.include_router(users_router)
 app.include_router(comparacion_router)
+app.include_router(reporte_router)
+
 
 @app.get("/")
 def health():
