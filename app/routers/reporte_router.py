@@ -1,11 +1,18 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import (
+    APIRouter,
+    Depends,
+    Query,
+)
 
 from app.constants.roles import (
     ADMIN,
     CONSULTA,
     OPERADOR,
+)
+from app.docs.reporte_docs import (
+    CONTROL_ACIERTOS_DOCS,
 )
 from app.schemas.user_schema import CurrentUser
 from app.security.dependencies import require_role
@@ -20,10 +27,31 @@ router = APIRouter(
 )
 
 
-@router.get("/control-aciertos")
+@router.get(
+    "/control-aciertos",
+    **CONTROL_ACIERTOS_DOCS,
+)
 def control_aciertos(
-    fecha: int,
-    turno: str,
+    fecha: Annotated[
+        int,
+        Query(
+            gt=0,
+            description="Fecha del sorteo en formato AAAAMMDD.",
+            examples=[20260810],
+        ),
+    ],
+    turno: Annotated[
+        str,
+        Query(
+            min_length=1,
+            max_length=10,
+            description=(
+                "Turno correspondiente al reporte. "
+                "Valores válidos: PV, PR, M, V o N."
+            ),
+            examples=["PV"],
+        ),
+    ],
     _usuario_actual: Annotated[
         CurrentUser,
         Depends(

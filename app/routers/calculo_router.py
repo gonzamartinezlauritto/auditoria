@@ -1,11 +1,19 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import (
+    APIRouter,
+    Depends,
+    Query,
+)
 
 from app.constants.roles import (
     ADMIN,
     CONSULTA,
     OPERADOR,
+)
+from app.docs.calculo_docs import (
+    RESUMEN_CALCULO_DOCS,
+    RUN_CALCULO_DOCS,
 )
 from app.schemas.user_schema import CurrentUser
 from app.security.dependencies import require_role
@@ -21,10 +29,31 @@ router = APIRouter(
 )
 
 
-@router.post("/run")
+@router.post(
+    "/run",
+    **RUN_CALCULO_DOCS,
+)
 def run_calculo(
-    fecha: int,
-    turno: str,
+    fecha: Annotated[
+        int,
+        Query(
+            gt=0,
+            description="Fecha del sorteo en formato AAAAMMDD.",
+            examples=[20260810],
+        ),
+    ],
+    turno: Annotated[
+        str,
+        Query(
+            min_length=1,
+            max_length=10,
+            description=(
+                "Turno a calcular. "
+                "Valores válidos: PV, PR, M, V o N."
+            ),
+            examples=["PV"],
+        ),
+    ],
     _usuario_actual: Annotated[
         CurrentUser,
         Depends(
@@ -41,9 +70,19 @@ def run_calculo(
     )
 
 
-@router.get("/resumen")
+@router.get(
+    "/resumen",
+    **RESUMEN_CALCULO_DOCS,
+)
 def resumen_por_fecha(
-    fecha: int,
+    fecha: Annotated[
+        int,
+        Query(
+            gt=0,
+            description="Fecha del sorteo en formato AAAAMMDD.",
+            examples=[20260810],
+        ),
+    ],
     _usuario_actual: Annotated[
         CurrentUser,
         Depends(

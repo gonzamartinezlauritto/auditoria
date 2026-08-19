@@ -1,11 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    Query,
+)
 
 from app.constants.roles import (
     ADMIN,
     CONSULTA,
     OPERADOR,
+)
+from app.docs.extractos_docs import (
+    CARGAR_EXTRACTOS_DOCS,
+    CARGAR_EXTRACTOS_EXAMPLES,
+    CONSULTAR_EXTRACTOS_DOCS,
 )
 from app.schemas.resultados_schema import (
     CargarResultadosRequest,
@@ -19,14 +29,22 @@ from app.services.resultados_service import (
 
 
 router = APIRouter(
-    prefix="/resultados",
-    tags=["Resultados"],
+    prefix="/extractos",
+    tags=["Extractos"],
 )
 
 
-@router.post("/cargar")
+@router.post(
+    "/cargar",
+    **CARGAR_EXTRACTOS_DOCS,
+)
 def cargar_resultados_endpoint(
-    body: CargarResultadosRequest,
+    body: Annotated[
+        CargarResultadosRequest,
+        Body(
+            openapi_examples=CARGAR_EXTRACTOS_EXAMPLES,
+        ),
+    ],
     _usuario_actual: Annotated[
         CurrentUser,
         Depends(
@@ -49,9 +67,21 @@ def cargar_resultados_endpoint(
     )
 
 
-@router.get("")
+@router.get(
+    "",
+    **CONSULTAR_EXTRACTOS_DOCS,
+)
 def listar_resultados(
-    fecha: int,
+    fecha: Annotated[
+        int,
+        Query(
+            gt=0,
+            description=(
+                "Fecha del sorteo en formato AAAAMMDD."
+            ),
+            examples=[20260810],
+        ),
+    ],
     _usuario_actual: Annotated[
         CurrentUser,
         Depends(

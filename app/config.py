@@ -45,3 +45,12 @@ JWT_ALGORITHM = os.getenv(
 JWT_EXPIRE_MINUTES = int(
     os.getenv("JWT_EXPIRE_MINUTES", "480")
 )
+
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:5173",
+    ).split(",")
+    if origin.strip()
+]

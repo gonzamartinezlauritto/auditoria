@@ -1,14 +1,29 @@
-from typing import Annotated, Any
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Path,
+    status,
+)
+
 from app.constants.roles import ADMIN
-
+from app.docs.users_docs import (
+    ACTUALIZAR_USUARIO_DOCS,
+    CAMBIAR_ESTADO_DOCS,
+    CAMBIAR_PASSWORD_DOCS,
+    CREAR_USUARIO_DOCS,
+    ELIMINAR_USUARIO_DOCS,
+    LISTAR_USUARIOS_DOCS,
+    ME_DOCS,
+    OBTENER_USUARIO_DOCS,
+)
 from app.schemas.user_schema import (
     ActualizarUsuarioRequest,
     CambiarEstadoRequest,
     CambiarPasswordRequest,
     CrearUsuarioRequest,
-    CurrentUser
+    CurrentUser,
 )
 from app.security.dependencies import (
     get_current_user,
@@ -31,7 +46,10 @@ router = APIRouter(
 )
 
 
-@router.get("/me")
+@router.get(
+    "/me",
+    **ME_DOCS,
+)
 def obtener_perfil(
     usuario_actual: Annotated[
         CurrentUser,
@@ -51,6 +69,7 @@ def obtener_perfil(
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
+    **CREAR_USUARIO_DOCS,
 )
 def crear(
     data: CrearUsuarioRequest,
@@ -68,7 +87,10 @@ def crear(
     )
 
 
-@router.get("")
+@router.get(
+    "",
+    **LISTAR_USUARIOS_DOCS,
+)
 def listar(
     _usuario_actual: Annotated[
         CurrentUser,
@@ -78,20 +100,42 @@ def listar(
     return listar_usuarios()
 
 
-@router.get("/{usuario_id}")
+@router.get(
+    "/{usuario_id}",
+    **OBTENER_USUARIO_DOCS,
+)
 def obtener(
-    usuario_id: int,
+    usuario_id: Annotated[
+        int,
+        Path(
+            gt=0,
+            description="ID del usuario.",
+            examples=[2],
+        ),
+    ],
     _usuario_actual: Annotated[
         CurrentUser,
         Depends(require_role(ADMIN)),
     ],
 ):
-    return obtener_usuario_por_id(usuario_id)
+    return obtener_usuario_por_id(
+        usuario_id,
+    )
 
 
-@router.put("/{usuario_id}")
+@router.put(
+    "/{usuario_id}",
+    **ACTUALIZAR_USUARIO_DOCS,
+)
 def actualizar(
-    usuario_id: int,
+    usuario_id: Annotated[
+        int,
+        Path(
+            gt=0,
+            description="ID del usuario a actualizar.",
+            examples=[2],
+        ),
+    ],
     data: ActualizarUsuarioRequest,
     _usuario_actual: Annotated[
         CurrentUser,
@@ -107,9 +151,19 @@ def actualizar(
     )
 
 
-@router.patch("/{usuario_id}/password")
+@router.patch(
+    "/{usuario_id}/password",
+    **CAMBIAR_PASSWORD_DOCS,
+)
 def actualizar_password(
-    usuario_id: int,
+    usuario_id: Annotated[
+        int,
+        Path(
+            gt=0,
+            description="ID del usuario.",
+            examples=[2],
+        ),
+    ],
     data: CambiarPasswordRequest,
     _usuario_actual: Annotated[
         CurrentUser,
@@ -122,9 +176,19 @@ def actualizar_password(
     )
 
 
-@router.patch("/{usuario_id}/estado")
+@router.patch(
+    "/{usuario_id}/estado",
+    **CAMBIAR_ESTADO_DOCS,
+)
 def actualizar_estado(
-    usuario_id: int,
+    usuario_id: Annotated[
+        int,
+        Path(
+            gt=0,
+            description="ID del usuario.",
+            examples=[2],
+        ),
+    ],
     data: CambiarEstadoRequest,
     _usuario_actual: Annotated[
         CurrentUser,
@@ -137,12 +201,24 @@ def actualizar_estado(
     )
 
 
-@router.delete("/{usuario_id}")
+@router.delete(
+    "/{usuario_id}",
+    **ELIMINAR_USUARIO_DOCS,
+)
 def eliminar(
-    usuario_id: int,
+    usuario_id: Annotated[
+        int,
+        Path(
+            gt=0,
+            description="ID del usuario a eliminar.",
+            examples=[2],
+        ),
+    ],
     _usuario_actual: Annotated[
         CurrentUser,
         Depends(require_role(ADMIN)),
     ],
 ):
-    return eliminar_usuario(usuario_id)
+    return eliminar_usuario(
+        usuario_id,
+    )
