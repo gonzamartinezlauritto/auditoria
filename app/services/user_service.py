@@ -180,7 +180,12 @@ def actualizar_usuario(
     email: str,
     rol: str,
 ) -> dict[str, Any]:
-    username, nombre, email = _normalizar_datos_usuario(username, nombre, email)
+    username, nombre, email = _normalizar_datos_usuario(
+        username,
+        nombre,
+        email,
+    )
+
     rol = _validar_rol(rol)
 
     try:
@@ -190,7 +195,12 @@ def actualizar_usuario(
                 usuario_id,
             )
 
-            _validar_usuario_duplicado(conn=conn,username=username,email=email)
+            _validar_usuario_duplicado(
+                conn=conn,
+                username=username,
+                email=email,
+                usuario_id=usuario_id,
+            )
 
             usuario = user_repository.update_usuario(
                 conn=conn,
@@ -222,6 +232,7 @@ def actualizar_usuario(
             username,
             email,
         )
+
         raise UsuarioDuplicadoError()
 
     except Exception as error:
@@ -229,10 +240,94 @@ def actualizar_usuario(
             "Error inesperado al actualizar usuario: id=%s",
             usuario_id,
         )
+
         raise InternalServerError(
             "Error interno al actualizar el usuario"
         ) from error
 
+def editar_usuario_parcial(
+    usuario_id: int,
+    username: str | None = None,
+    nombre: str | None = None,
+    email: str | None = None,
+    rol: str | None = None,
+) -> dict[str, Any]:
+    try:
+        with transaction() as conn:
+            usuario_actual = _obtener_usuario_o_error(
+                conn,
+                usuario_id,
+            )
+
+            nuevo_username = (
+                username.strip()
+                if username is not None
+                else usuario_actual["username"]
+            )
+
+            nuevo_nombre = (
+                nombre.strip()
+                if nombre is not None
+                else usuario_actual["nombre"]
+            )
+
+            nuevo_email = (
+                email.strip().lower()
+                if email is not None
+                else usuario_actual["email"]
+            )
+
+            nuevo_rol = (
+                _validar_rol(rol)
+                if rol is not None
+                else usuario_actual["rol"]
+            )
+
+            _validar_usuario_duplicado(
+                conn=conn,
+                username=nuevo_username,
+                email=nuevo_email,
+                usuario_id=usuario_id,
+            )
+
+            usuario = user_repository.update_usuario(
+                conn=conn,
+                usuario_id=usuario_id,
+                username=nuevo_username,
+                nombre=nuevo_nombre,
+                email=nuevo_email,
+                rol=nuevo_rol,
+            )
+
+            if not usuario:
+                raise UsuarioNoEncontradoError()
+
+        logger.info(
+            "Usuario editado parcialmente: id=%s",
+            usuario_id,
+        )
+
+        return usuario
+
+    except AppException:
+        raise
+
+    except IntegrityError:
+        logger.warning(
+            "Conflicto de integridad al editar usuario: id=%s",
+            usuario_id,
+        )
+        raise UsuarioDuplicadoError()
+
+    except Exception as error:
+        logger.exception(
+            "Error inesperado al editar usuario: id=%s",
+            usuario_id,
+        )
+
+        raise InternalServerError(
+            "Error interno al editar el usuario"
+        ) from error
 
 def cambiar_password(
     usuario_id: int,

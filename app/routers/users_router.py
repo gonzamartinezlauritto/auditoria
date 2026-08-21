@@ -8,32 +8,41 @@ from fastapi import (
 )
 
 from app.constants.roles import ADMIN
+
 from app.docs.users_docs import (
     ACTUALIZAR_USUARIO_DOCS,
     CAMBIAR_ESTADO_DOCS,
     CAMBIAR_PASSWORD_DOCS,
     CREAR_USUARIO_DOCS,
+    EDITAR_USUARIO_PARCIAL_DOCS,
     ELIMINAR_USUARIO_DOCS,
     LISTAR_USUARIOS_DOCS,
     ME_DOCS,
     OBTENER_USUARIO_DOCS,
 )
+
 from app.schemas.user_schema import (
     ActualizarUsuarioRequest,
     CambiarEstadoRequest,
     CambiarPasswordRequest,
     CrearUsuarioRequest,
     CurrentUser,
+    EditarUsuarioRequest,
+    MensajeResponse,
+    UsuarioResponse,
 )
+
 from app.security.dependencies import (
     get_current_user,
     require_role,
 )
+
 from app.services.user_service import (
     actualizar_usuario,
     cambiar_estado_usuario,
     cambiar_password,
     crear_usuario,
+    editar_usuario_parcial,
     eliminar_usuario,
     listar_usuarios,
     obtener_usuario_por_id,
@@ -46,8 +55,13 @@ router = APIRouter(
 )
 
 
+# =========================================================
+# PERFIL
+# =========================================================
+
 @router.get(
     "/me",
+    response_model=UsuarioResponse,
     **ME_DOCS,
 )
 def obtener_perfil(
@@ -66,9 +80,14 @@ def obtener_perfil(
     }
 
 
+# =========================================================
+# CREAR
+# =========================================================
+
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
+    response_model=UsuarioResponse,
     **CREAR_USUARIO_DOCS,
 )
 def crear(
@@ -87,8 +106,13 @@ def crear(
     )
 
 
+# =========================================================
+# LISTAR
+# =========================================================
+
 @router.get(
     "",
+    response_model=list[UsuarioResponse],
     **LISTAR_USUARIOS_DOCS,
 )
 def listar(
@@ -100,8 +124,13 @@ def listar(
     return listar_usuarios()
 
 
+# =========================================================
+# OBTENER POR ID
+# =========================================================
+
 @router.get(
     "/{usuario_id}",
+    response_model=UsuarioResponse,
     **OBTENER_USUARIO_DOCS,
 )
 def obtener(
@@ -123,8 +152,13 @@ def obtener(
     )
 
 
+# =========================================================
+# ACTUALIZACIÓN COMPLETA
+# =========================================================
+
 @router.put(
     "/{usuario_id}",
+    response_model=UsuarioResponse,
     **ACTUALIZAR_USUARIO_DOCS,
 )
 def actualizar(
@@ -151,8 +185,48 @@ def actualizar(
     )
 
 
+# =========================================================
+# ACTUALIZACIÓN PARCIAL
+# =========================================================
+
+@router.patch(
+    "/{usuario_id}",
+    response_model=UsuarioResponse,
+    **EDITAR_USUARIO_PARCIAL_DOCS,
+)
+def editar_parcial(
+    usuario_id: Annotated[
+        int,
+        Path(
+            gt=0,
+            description=(
+                "ID del usuario que se desea modificar."
+            ),
+            examples=[5],
+        ),
+    ],
+    data: EditarUsuarioRequest,
+    _usuario_actual: Annotated[
+        CurrentUser,
+        Depends(require_role(ADMIN)),
+    ],
+):
+    return editar_usuario_parcial(
+        usuario_id=usuario_id,
+        username=data.username,
+        nombre=data.nombre,
+        email=data.email,
+        rol=data.rol,
+    )
+
+
+# =========================================================
+# CAMBIAR PASSWORD
+# =========================================================
+
 @router.patch(
     "/{usuario_id}/password",
+    response_model=MensajeResponse,
     **CAMBIAR_PASSWORD_DOCS,
 )
 def actualizar_password(
@@ -176,8 +250,13 @@ def actualizar_password(
     )
 
 
+# =========================================================
+# CAMBIAR ESTADO
+# =========================================================
+
 @router.patch(
     "/{usuario_id}/estado",
+    response_model=UsuarioResponse,
     **CAMBIAR_ESTADO_DOCS,
 )
 def actualizar_estado(
@@ -201,8 +280,13 @@ def actualizar_estado(
     )
 
 
+# =========================================================
+# ELIMINAR
+# =========================================================
+
 @router.delete(
     "/{usuario_id}",
+    response_model=MensajeResponse,
     **ELIMINAR_USUARIO_DOCS,
 )
 def eliminar(

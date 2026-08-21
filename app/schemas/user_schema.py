@@ -6,6 +6,10 @@ from pydantic import (
 )
 
 
+# =========================================================
+# REQUESTS
+# =========================================================
+
 class CrearUsuarioRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
@@ -49,7 +53,7 @@ class CrearUsuarioRequest(BaseModel):
         default="operador",
         description=(
             "Rol asignado al usuario. "
-            "Ejemplos: admin, operador o consulta."
+            "Valores permitidos: admin, operador o consulta."
         ),
         examples=["operador"],
     )
@@ -76,8 +80,54 @@ class ActualizarUsuarioRequest(BaseModel):
     )
 
     rol: str = Field(
-        description="Rol asignado.",
+        description=(
+            "Rol asignado. "
+            "Valores permitidos: admin, operador o consulta."
+        ),
         examples=["operador"],
+    )
+
+
+class EditarUsuarioRequest(BaseModel):
+    username: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=100,
+        description=(
+            "Nuevo nombre de usuario. "
+            "Si no se envía, se conserva el actual."
+        ),
+        examples=["operador_editado"],
+    )
+
+    nombre: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=150,
+        description=(
+            "Nuevo nombre completo. "
+            "Si no se envía, se conserva el actual."
+        ),
+        examples=["Operador Editado"],
+    )
+
+    email: EmailStr | None = Field(
+        default=None,
+        description=(
+            "Nuevo correo electrónico. "
+            "Si no se envía, se conserva el actual."
+        ),
+        examples=["operador_editado@ejemplo.com"],
+    )
+
+    rol: str | None = Field(
+        default=None,
+        description=(
+            "Nuevo rol del usuario. "
+            "Valores permitidos: admin, operador o consulta. "
+            "Si no se envía, se conserva el actual."
+        ),
+        examples=["admin"],
     )
 
 
@@ -99,6 +149,48 @@ class CambiarEstadoRequest(BaseModel):
         examples=[True],
     )
 
+
+# =========================================================
+# RESPONSES
+# =========================================================
+
+class UsuarioResponse(BaseModel):
+    id: int
+    username: str
+    nombre: str
+    email: str
+    rol: str
+    activo: bool
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": 5,
+                "username": "operador1",
+                "nombre": "Operador Prueba",
+                "email": "operador1@ejemplo.com",
+                "rol": "operador",
+                "activo": True,
+            }
+        }
+    )
+
+
+class MensajeResponse(BaseModel):
+    message: str
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "message": "Operación realizada correctamente"
+            }
+        }
+    )
+
+
+# =========================================================
+# USUARIO AUTENTICADO
+# =========================================================
 
 class CurrentUser(BaseModel):
     id: int
