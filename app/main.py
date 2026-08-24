@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,6 +19,14 @@ from app.routers.exp_router import router as exp_router
 from app.routers.reporte_router import router as reporte_router
 from app.routers.resultados_router import router as resultados_router
 from app.routers.users_router import router as users_router
+from app.services.bootstrap_service import crear_admin_inicial
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    crear_admin_inicial()
+
+    yield
 
 
 app = FastAPI(
@@ -24,6 +34,7 @@ app = FastAPI(
     description=API_DESCRIPTION,
     version="1.0.0",
     openapi_tags=OPENAPI_TAGS,
+    lifespan=lifespan,
 )
 
 
