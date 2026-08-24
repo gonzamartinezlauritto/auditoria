@@ -1,10 +1,31 @@
-import shutil
-import time
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.services.exp_service import process_exp, process_exp_fast
-from app.services.zip_service import extraer_quiniela_exp_desde_zip
+from typing import Annotated
 
-from app.config import UPLOADS_DIR
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Query,
+    UploadFile,
+)
+
+from app.constants.roles import (
+    ADMIN,
+    OPERADOR,
+)
+from app.docs.exp_docs import (
+    PROCESS_EXP_DOCS,
+    PROCESS_EXP_ZIP_DOCS,
+    TEST_EXP_DOCS,
+    UPLOAD_EXP_DOCS,
+)
+from app.schemas.user_schema import CurrentUser
+from app.security.dependencies import require_role
+from app.services.exp_service import (
+    procesar_archivo_exp,
+    procesar_archivo_exp_zip,
+    subir_archivo_exp,
+)
+
 
 router = APIRouter(
     prefix="/exp",
@@ -12,124 +33,152 @@ router = APIRouter(
 )
 
 
-@router.get("/test")
-def test_exp_router():
-    return {"message": "Router EXP funcionando"}
-
-
-@router.post("/upload")
-async def upload_exp(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith(".exp"):
-        raise HTTPException(
-            status_code=400,
-            detail="El archivo debe tener extensión .exp"
-        )
-
-    file_path = UPLOADS_DIR / file.filename
-
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    size_bytes = file_path.stat().st_size
-
+@router.get(
+    "/test",
+    **TEST_EXP_DOCS,
+)
+def test_exp_router(
+    _usuario_actual: Annotated[
+        CurrentUser,
+        Depends(
+            require_role(
+                ADMIN,
+                OPERADOR,
+            )
+        ),
+    ],
+):
     return {
-        "message": "Archivo EXP subido correctamente",
-        "filename": file.filename,
-        "path": str(file_path),
-        "size_bytes": size_bytes,
+        "message": "Router EXP funcionando",
     }
 
-@router.post("/process")
-async def process_uploaded_exp(
-    fecha: int,
-    turno: str,
-    file: UploadFile = File(...)
+
+@router.post(
+    "/upload",
+    **UPLOAD_EXP_DOCS,
+)
+def upload_exp(
+    file: Annotated[
+        UploadFile,
+        File(
+            ...,
+            description=(
+                "Archivo EXP que se desea almacenar."
+            ),
+        ),
+    ],
+    _usuario_actual: Annotated[
+        CurrentUser,
+        Depends(
+            require_role(
+                ADMIN,
+                OPERADOR,
+            )
+        ),
+    ],
 ):
-    start_total = time.time()
-
-    file_path = UPLOADS_DIR / file.filename
-
-    start_save = time.time()
-
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    save_seconds = time.time() - start_save
-
-    size_bytes = file_path.stat().st_size
-
-    start_process = time.time()
-
-    resultado = process_exp_fast(
-        file_path=file_path,
-        fecha=fecha,
-        turno=turno.upper()
+    return subir_archivo_exp(
+        file=file,
     )
 
-    process_seconds = time.time() - start_process
 
-    total_seconds = time.time() - start_total
-
-    resultado["archivo"] = {
-        "filename": file.filename,
-        "path": str(file_path),
-        "size_bytes": size_bytes,
-    }
-
-    resultado["tiempos_router"] = {
-        "guardar_archivo_segundos": round(save_seconds, 2),
-        "procesar_exp_segundos": round(process_seconds, 2),
-        "total_segundos": round(total_seconds, 2),
-    }
-
-    return resultado
-
-@router.post("/process-zip")
-async def process_exp_zip(
-    fecha: int,
-    turno: str,
-    file: UploadFile = File(...)
+@router.post(
+    "/process",
+    **PROCESS_EXP_DOCS,
+)
+def process_uploaded_exp(
+    fecha: Annotated[
+        int,
+        Query(
+            gt=0,
+            description="Fecha del sorteo en formato AAAAMMDD.",
+            examples=[20260810],
+        ),
+    ],
+    turno: Annotated[
+        str,
+        Query(
+            min_length=1,
+            max_length=10,
+            description=(
+                "Turno a procesar. "
+                "Valores válidos: PV, PR, M, V o N."
+            ),
+            examples=["PV"],
+        ),
+    ],
+    file: Annotated[
+        UploadFile,
+        File(
+            ...,
+            description=(
+                "Archivo .exp que contiene las apuestas."
+            ),
+        ),
+    ],
+    _usuario_actual: Annotated[
+        CurrentUser,
+        Depends(
+            require_role(
+                ADMIN,
+                OPERADOR,
+            )
+        ),
+    ],
 ):
-    start_total = time.time()
-
-    turno = turno.upper().strip()
-
-    if not file.filename.lower().endswith(".zip"):
-        raise HTTPException(
-            status_code=400,
-            detail="El archivo debe ser ZIP"
-        )
-
-    extract_dir = UPLOADS_DIR / str(fecha) / turno / "exp"
-    extract_dir.mkdir(parents=True, exist_ok=True)
-
-    zip_path = extract_dir / file.filename
-
-    with zip_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    exp_path = extraer_quiniela_exp_desde_zip(
-        zip_path=zip_path,
-        destino_dir=extract_dir
-    )
-
-    resultado = process_exp_fast(
-        file_path=exp_path,
+    return procesar_archivo_exp(
+        file=file,
         fecha=fecha,
-        turno=turno
+        turno=turno,
     )
 
-    resultado["zip"] = {
-        "archivo_zip": file.filename,
-        "path_zip": str(zip_path),
-        "archivo_exp": exp_path.name,
-        "path_exp": str(exp_path),
-        "carpeta": str(extract_dir),
-    }
 
-    resultado["tiempo_total_zip"] = round(
-        time.time() - start_total,
-        2
+@router.post(
+    "/process-zip",
+    **PROCESS_EXP_ZIP_DOCS,
+)
+def process_exp_zip(
+    fecha: Annotated[
+        int,
+        Query(
+            gt=0,
+            description="Fecha del sorteo en formato AAAAMMDD.",
+            examples=[20260810],
+        ),
+    ],
+    turno: Annotated[
+        str,
+        Query(
+            min_length=1,
+            max_length=10,
+            description=(
+                "Turno a procesar. "
+                "Valores válidos: PV, PR, M, V o N."
+            ),
+            examples=["PV"],
+        ),
+    ],
+    file: Annotated[
+        UploadFile,
+        File(
+            ...,
+            description=(
+                "Archivo ZIP que contiene el archivo EXP."
+            ),
+        ),
+    ],
+    _usuario_actual: Annotated[
+        CurrentUser,
+        Depends(
+            require_role(
+                ADMIN,
+                OPERADOR,
+            )
+        ),
+    ],
+):
+    return procesar_archivo_exp_zip(
+        file=file,
+        fecha=fecha,
+        turno=turno,
     )
-
-    return resultado
