@@ -34,8 +34,11 @@ DB_CONFIG = {
     "port": int(
         os.getenv("DB_PORT", "5432")
     ),
+    "sslmode": os.getenv(
+        "DB_SSLMODE",
+        "prefer",
+    ),
 }
-
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 JWT_ALGORITHM = os.getenv(
