@@ -14,7 +14,7 @@ API para el proceso de auditoría de quiniela.
 
 3. **Carga de extractos**
    - Cargar los resultados oficiales mediante `POST /extractos/cargar`.
-   - Deben enviarse los **5 extractos juntos**.
+   - Deben enviarse los **7 extractos juntos**.
    - Cada extracto debe contener exactamente **20 números**.
 
 4. **Cálculo**

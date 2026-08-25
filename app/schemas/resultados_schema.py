@@ -123,10 +123,10 @@ class CargarResultadosRequest(BaseModel):
     )
 
     resultados: list[ResultadoExtractoRequest] = Field(
-        min_length=5,
-        max_length=5,
+        min_length=7,
+        max_length=7,
         description=(
-            "Los 5 extractos deben enviarse juntos "
+            "Los 7 extractos deben enviarse juntos "
             "en una única solicitud."
         ),
     )
