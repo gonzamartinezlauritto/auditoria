@@ -1,10 +1,10 @@
 CARGAR_EXTRACTOS_DOCS = {
-    "summary": "Cargar resultados de los 5 extractos",
+    "summary": "Cargar resultados de los 7 extractos",
     "description": (
-        "Carga los resultados oficiales de los 5 extractos "
+        "Carga los resultados oficiales de los 7 extractos "
         "correspondientes a una fecha y turno.\n\n"
         "**Reglas:**\n"
-        "- Deben enviarse exactamente 5 extractos.\n"
+        "- Deben enviarse exactamente 7 extractos.\n"
         "- Cada extracto debe contener exactamente 20 números.\n"
         "- Los números deben respetar el orden de salida del 1 al 20.\n"
         "- Los números deben enviarse como texto para conservar ceros iniciales.\n\n"
@@ -57,7 +57,7 @@ CARGAR_EXTRACTOS_DOCS = {
         422: {
             "description": (
                 "❌ Datos inválidos. Deben enviarse exactamente "
-                "5 extractos y cada uno debe contener 20 números."
+                "7 extractos y cada uno debe contener 20 números."
             ),
             "content": {
                 "application/json": {
@@ -76,7 +76,7 @@ CARGAR_EXTRACTOS_DOCS = {
                                         ],
                                         "msg": (
                                             "List should have at least "
-                                            "5 items after validation"
+                                            "7 items after validation"
                                         ),
                                     }
                                 ]
@@ -114,9 +114,9 @@ CARGAR_EXTRACTOS_DOCS = {
 
 CARGAR_EXTRACTOS_EXAMPLES = {
     "carga_completa": {
-        "summary": "Carga completa de 5 extractos",
+        "summary": "Carga completa de 7 extractos",
         "description": (
-            "Los 5 extractos deben enviarse juntos "
+            "Los 7 extractos deben enviarse juntos "
             "en una única solicitud."
         ),
         "value": {
