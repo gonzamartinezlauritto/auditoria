@@ -280,3 +280,72 @@ def contar_apuestas_por_fecha_turno(
         resultado = cur.fetchone()
 
         return resultado[0] if resultado else 0
+
+
+# ============================================================
+# RESUMEN POR EXTRACTO
+# ============================================================
+
+def obtener_resumen_extractos(
+    conn: connection,
+    fecha: int,
+    turno: str,
+) -> list[tuple]:
+    """
+    Devuelve por cada extracto del turno:
+
+    - codigo_extracto
+    - cupones_jugados
+    - recaudacion
+
+    La lógica replica exactamente la utilizada
+    por calculo_repository para:
+
+    - contar_cupones_jugados
+    - obtener_total_recaudado
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                q.n_codext AS codigo_extracto,
+
+                COUNT(
+                    DISTINCT (
+                        q.n_agent,
+                        q.n_subag,
+                        q.n_maqui,
+                        q.n_cupon
+                    )
+                ) AS cupones_jugados,
+
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN q.n_impapos > 0
+                            THEN q.n_impapos
+                            ELSE 0
+                        END
+                    ),
+                    0
+                ) AS recaudacion
+
+            FROM quiniela_exp q
+
+            WHERE q.n_fsorteo = %s
+              AND UPPER(TRIM(q.c_tsorteo)) = %s
+              AND COALESCE(q.c_ecupon, '') = 'N'
+              AND COALESCE(q.n_nodef, 0) <> 1
+
+            GROUP BY q.n_codext
+
+            ORDER BY q.n_codext
+            """,
+            (
+                fecha,
+                turno.upper().strip(),
+            ),
+        )
+
+        return cur.fetchall()

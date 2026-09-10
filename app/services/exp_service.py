@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 import time
@@ -276,6 +277,48 @@ def process_exp_fast(
                     f"turno={turno_normalizado}"
                 )
 
+            # ========================================================
+            # RESUMEN POR EXTRACTO
+            # ========================================================
+
+            inicio = time.perf_counter()
+
+            resumen_extractos_rows = (
+                exp_repository.obtener_resumen_extractos(
+                    conn=conn,
+                    fecha=fecha,
+                    turno=turno_normalizado,
+                )
+            )
+
+            resumen_extractos = [
+                {
+                    "codigo_extracto": int(
+                        codigo_extracto
+                    ),
+                    "cupones_jugados": int(
+                        cupones_jugados
+                    ),
+                    "recaudacion": float(
+                        Decimal(
+                            str(recaudacion or 0)
+                        ).quantize(
+                            Decimal("0.01")
+                        )
+                    ),
+                }
+                for (
+                    codigo_extracto,
+                    cupones_jugados,
+                    recaudacion,
+                ) in resumen_extractos_rows
+            ]
+
+            tiempos["resumen_extractos_segundos"] = round(
+                time.perf_counter() - inicio,
+                2,
+            )
+
             inicio = time.perf_counter()
 
             marcar_exp_cargado(
@@ -299,7 +342,8 @@ def process_exp_fast(
             "Archivo EXP procesado: "
             "archivo=%s fecha=%s turno=%s "
             "total=%s insertados=%s "
-            "turnos_invalidos=%s duplicados=%s",
+            "turnos_invalidos=%s duplicados=%s "
+            "extractos=%s",
             archivo_origen,
             fecha,
             turno_normalizado,
@@ -307,6 +351,7 @@ def process_exp_fast(
             insertados,
             ignorados_turno_invalido,
             ignorados_por_duplicado,
+            len(resumen_extractos),
         )
 
         return {
@@ -327,6 +372,10 @@ def process_exp_fast(
             ),
             "turnos_ignorados": turnos_ignorados,
             "cargados_turno": cargados_turno,
+
+            # NUEVO
+            "extractos": resumen_extractos,
+
             "modo": (
                 "copy_tmp_filter_valid_turns_"
                 "insert_on_conflict_do_nothing"
