@@ -754,3 +754,52 @@ def obtener_resumen_por_fecha(
         )
 
         return cur.fetchall()
+
+def actualizar_cupones_ganadores_unicos_resumen(
+    conn: connection,
+    fecha: int,
+    turno: str,
+    cantidad: int,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE resumen_auditoria
+            SET cupones_ganadores_unicos = %s
+            WHERE fecha_sorteo = %s
+              AND turno = %s
+            """,
+            (
+                cantidad,
+                fecha,
+                turno,
+            ),
+        )
+
+def obtener_reportes_turno(
+    conn: connection,
+    fecha: int,
+    turno: str,
+) -> list[tuple]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                codigo_extracto,
+                sorteo,
+                cupones_jugados,
+                recaudacion,
+                importe_premiados,
+                apuestas_premiadas
+            FROM resumen_auditoria
+            WHERE fecha_sorteo = %s
+              AND turno = %s
+            ORDER BY codigo_extracto
+            """,
+            (
+                fecha,
+                turno,
+            ),
+        )
+
+        return cur.fetchall()

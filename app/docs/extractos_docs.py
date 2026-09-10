@@ -229,3 +229,152 @@ CONSULTAR_EXTRACTOS_DOCS = {
         },
     },
 }
+
+
+MODIFICAR_EXTRACTOS_DOCS = {
+    "summary": "Modificar y recalcular extractos",
+    "description": (
+        "Permite corregir uno o varios extractos ya cargados. "
+        "Cada extracto debe enviarse nuevamente con sus 20 "
+        "resultados completos. "
+        "El sistema detecta cuáles fueron modificados, "
+        "reemplaza sus resultados, elimina sus aciertos "
+        "calculados anteriormente y recalcula únicamente "
+        "los extractos afectados. "
+        "Finalmente devuelve el reporte completo actualizado "
+        "del turno."
+    ),
+    "responses": {
+        200: {
+            "description": (
+                "Extractos modificados y cálculo actualizado "
+                "correctamente."
+            ),
+        },
+        400: {
+            "description": (
+                "Datos inválidos o cantidad incorrecta "
+                "de resultados."
+            ),
+        },
+        404: {
+            "description": (
+                "No existen resultados cargados para "
+                "alguno de los extractos."
+            ),
+        },
+        500: {
+            "description": (
+                "Error interno al modificar y recalcular "
+                "los extractos."
+            ),
+        },
+    },
+}
+
+
+MODIFICAR_EXTRACTOS_EXAMPLES = {
+    "modificar_un_extracto": {
+        "summary": "Modificar un extracto",
+        "description": (
+            "Ejemplo de corrección de un extracto. "
+            "Aunque solamente cambie un número, deben "
+            "enviarse los 20 resultados."
+        ),
+        "value": {
+            "fecha": 20260810,
+            "turno": "PV",
+            "resultados": [
+                {
+                    "codigo_extracto": 54,
+                    "numeros": [
+                        "4162",
+                        "6470",
+                        "6973",
+                        "8417",
+                        "0166",
+                        "4840",
+                        "3857",
+                        "3866",
+                        "7330",
+                        "6115",
+                        "5125",
+                        "5013",
+                        "0088",
+                        "1603",
+                        "0627",
+                        "7347",
+                        "6596",
+                        "0772",
+                        "9723",
+                        "3320",
+                    ],
+                },
+            ],
+        },
+    },
+
+    "modificar_varios_extractos": {
+        "summary": "Modificar varios extractos",
+        "description": (
+            "Permite corregir varios extractos "
+            "en una única operación."
+        ),
+        "value": {
+            "fecha": 20260810,
+            "turno": "PV",
+            "resultados": [
+                {
+                    "codigo_extracto": 50,
+                    "numeros": [
+                        "4162",
+                        "6470",
+                        "6973",
+                        "8417",
+                        "0166",
+                        "4840",
+                        "3857",
+                        "3866",
+                        "7330",
+                        "6115",
+                        "5125",
+                        "5013",
+                        "0088",
+                        "1603",
+                        "0627",
+                        "7347",
+                        "6596",
+                        "0772",
+                        "9723",
+                        "3320",
+                    ],
+                },
+                {
+                    "codigo_extracto": 54,
+                    "numeros": [
+                        "1234",
+                        "5678",
+                        "9012",
+                        "3456",
+                        "7890",
+                        "1122",
+                        "3344",
+                        "5566",
+                        "7788",
+                        "9900",
+                        "1111",
+                        "2222",
+                        "3333",
+                        "4444",
+                        "5555",
+                        "6666",
+                        "7777",
+                        "8888",
+                        "9999",
+                        "0000",
+                    ],
+                },
+            ],
+        },
+    },
+}

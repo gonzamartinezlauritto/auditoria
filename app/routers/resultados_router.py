@@ -16,14 +16,19 @@ from app.docs.extractos_docs import (
     CARGAR_EXTRACTOS_DOCS,
     CARGAR_EXTRACTOS_EXAMPLES,
     CONSULTAR_EXTRACTOS_DOCS,
+    MODIFICAR_EXTRACTOS_DOCS,
+    MODIFICAR_EXTRACTOS_EXAMPLES,
 )
 from app.schemas.resultados_schema import (
     CargarResultadosRequest,
+    ModificarResultadosRequest,
+    ModificarResultadosResponse,
 )
 from app.schemas.user_schema import CurrentUser
 from app.security.dependencies import require_role
 from app.services.resultados_service import (
     cargar_resultados,
+    modificar_resultados,
     obtener_resultados_por_fecha,
 )
 
@@ -95,4 +100,39 @@ def listar_resultados(
 ):
     return obtener_resultados_por_fecha(
         fecha=fecha,
+    )
+
+@router.put(
+    "/modificar",
+    response_model=ModificarResultadosResponse,
+    **MODIFICAR_EXTRACTOS_DOCS,
+)
+def modificar_resultados_endpoint(
+    body: Annotated[
+        ModificarResultadosRequest,
+        Body(
+            openapi_examples=(
+                MODIFICAR_EXTRACTOS_EXAMPLES
+            ),
+        ),
+    ],
+    _usuario_actual: Annotated[
+        CurrentUser,
+        Depends(
+            require_role(
+                ADMIN,
+                OPERADOR,
+            )
+        ),
+    ],
+):
+    resultados = [
+        item.model_dump()
+        for item in body.resultados
+    ]
+
+    return modificar_resultados(
+        fecha=body.fecha,
+        turno=body.turno,
+        resultados=resultados,
     )

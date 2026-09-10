@@ -82,3 +82,30 @@ def obtener_resultados_por_fecha(
         )
 
         return cur.fetchall()
+
+def obtener_resultados_extracto(
+    conn: connection,
+    fecha: int,
+    turno: str,
+    codigo_extracto: int,
+) -> list[tuple]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                orden_resultado,
+                numero_resultado
+            FROM resultados
+            WHERE fecha_sorteo = %s
+              AND turno = %s
+              AND codigo_extracto = %s
+            ORDER BY orden_resultado
+            """,
+            (
+                fecha,
+                turno,
+                codigo_extracto,
+            ),
+        )
+
+        return cur.fetchall()

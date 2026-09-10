@@ -1,132 +1,200 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
-class ResultadoExtractoRequest(BaseModel):
+# ============================================================
+# ITEM DE RESULTADOS DE UN EXTRACTO
+# ============================================================
+
+class ResultadoExtractoItem(BaseModel):
     codigo_extracto: int = Field(
+        ...,
         gt=0,
-        description="Código identificador del extracto.",
+        description="Código del extracto.",
         examples=[50],
     )
 
     numeros: list[str] = Field(
+        ...,
         min_length=20,
         max_length=20,
         description=(
-            "Lista con exactamente 20 números sorteados, "
-            "respetando el orden de salida del 1 al 20."
+            "Lista completa de los 20 resultados "
+            "del extracto, ordenados del puesto 1 al 20."
         ),
         examples=[
             [
-                "3359",
-                "4249",
-                "6765",
-                "2210",
-                "5357",
-                "4051",
-                "6479",
-                "5895",
-                "9818",
-                "7106",
-                "8184",
-                "0922",
-                "3165",
-                "1275",
-                "2968",
-                "7639",
-                "0682",
-                "6683",
-                "9474",
-                "2243",
+                "4162",
+                "6470",
+                "6973",
+                "8417",
+                "0166",
+                "4840",
+                "3857",
+                "3866",
+                "7330",
+                "6115",
+                "5125",
+                "5013",
+                "0088",
+                "1603",
+                "0627",
+                "7347",
+                "6596",
+                "0772",
+                "9723",
+                "3320",
             ]
         ],
     )
 
 
-class CargarResultadosRequest(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "fecha": 20260810,
-                    "turno": "PV",
-                    "resultados": [
-                        {
-                            "codigo_extracto": 50,
-                            "numeros": [
-                                "3359", "4249", "6765", "2210",
-                                "5357", "4051", "6479", "5895",
-                                "9818", "7106", "8184", "0922",
-                                "3165", "1275", "2968", "7639",
-                                "0682", "6683", "9474", "2243",
-                            ],
-                        },
-                        {
-                            "codigo_extracto": 51,
-                            "numeros": [
-                                "5603", "1545", "6242", "7770",
-                                "0864", "3515", "8708", "4234",
-                                "4161", "6774", "0453", "4564",
-                                "8771", "1483", "6517", "7932",
-                                "3418", "9920", "0969", "2054",
-                            ],
-                        },
-                        {
-                            "codigo_extracto": 52,
-                            "numeros": [
-                                "1741", "6331", "0931", "5727",
-                                "0972", "8682", "2189", "8937",
-                                "8887", "5818", "2303", "2124",
-                                "0719", "3091", "1312", "4863",
-                                "8789", "2778", "2645", "9750",
-                            ],
-                        },
-                        {
-                            "codigo_extracto": 53,
-                            "numeros": [
-                                "4233", "8215", "2918", "5443",
-                                "0390", "8269", "0779", "3774",
-                                "2177", "9787", "3455", "5307",
-                                "0281", "4966", "3352", "1011",
-                                "6753", "2421", "5090", "2442",
-                            ],
-                        },
-                        {
-                            "codigo_extracto": 54,
-                            "numeros": [
-                                "6778", "7082", "8416", "5737",
-                                "9291", "8666", "2457", "7486",
-                                "7231", "5318", "8352", "6886",
-                                "3460", "7666", "8883", "7246",
-                                "7577", "4966", "7103", "2758",
-                            ],
-                        },
-                    ],
-                }
-            ]
-        }
-    )
+# ============================================================
+# REQUEST - CARGAR RESULTADOS
+# ============================================================
 
+class CargarResultadosRequest(BaseModel):
     fecha: int = Field(
+        ...,
         gt=0,
-        description="Fecha del sorteo en formato AAAAMMDD.",
+        description=(
+            "Fecha del sorteo en formato AAAAMMDD."
+        ),
         examples=[20260810],
     )
 
     turno: str = Field(
+        ...,
         min_length=1,
-        max_length=10,
         description=(
-            "Turno correspondiente al sorteo. "
-            "Valores válidos: PV, PR, M, V o N."
+            "Código del turno del sorteo."
         ),
         examples=["PV"],
     )
 
-    resultados: list[ResultadoExtractoRequest] = Field(
-        min_length=7,
-        max_length=7,
+    resultados: list[ResultadoExtractoItem] = Field(
+        ...,
+        min_length=1,
         description=(
-            "Los 7 extractos deben enviarse juntos "
-            "en una única solicitud."
+            "Listado de extractos con sus "
+            "20 resultados."
         ),
+    )
+
+
+# ============================================================
+# REQUEST - MODIFICAR RESULTADOS
+# ============================================================
+
+class ModificarResultadosRequest(
+    CargarResultadosRequest
+):
+    """
+    Request para modificar uno o varios
+    extractos previamente cargados.
+
+    Se utiliza la misma estructura que para la carga:
+    fecha, turno y uno o varios extractos con
+    sus 20 resultados completos.
+    """
+
+    pass
+
+
+# ============================================================
+# REPORTE DE CÁLCULO POR EXTRACTO
+# ============================================================
+
+class ReporteCalculoItem(BaseModel):
+    codigo_extracto: int = Field(
+        ...,
+        description="Código del extracto.",
+        examples=[50],
+    )
+
+    sorteo: str = Field(
+        ...,
+        description="Nombre del sorteo.",
+        examples=["La Previa Ctes."],
+    )
+
+    cupones_jugados: int = Field(
+        ...,
+        description=(
+            "Cantidad de cupones jugados "
+            "para el extracto."
+        ),
+        examples=[14750],
+    )
+
+    recaudacion: float = Field(
+        ...,
+        description=(
+            "Importe total recaudado "
+            "para el extracto."
+        ),
+        examples=[14258278.0],
+    )
+
+    importe_premiados: float = Field(
+        ...,
+        description=(
+            "Importe total de premios "
+            "calculados para el extracto."
+        ),
+        examples=[3735313.5],
+    )
+
+    apuestas_premiadas: int = Field(
+        ...,
+        description=(
+            "Cantidad de apuestas/cupones "
+            "premiados del extracto."
+        ),
+        examples=[355],
+    )
+
+
+# ============================================================
+# RESPONSE - MODIFICAR RESULTADOS
+# ============================================================
+
+class ModificarResultadosResponse(BaseModel):
+    ok: bool = Field(
+        ...,
+        description=(
+            "Indica si la modificación "
+            "y el recálculo finalizaron correctamente."
+        ),
+        examples=[True],
+    )
+
+    fecha: int = Field(
+        ...,
+        description=(
+            "Fecha del sorteo en formato AAAAMMDD."
+        ),
+        examples=[20260810],
+    )
+
+    turno: str = Field(
+        ...,
+        description="Código del turno.",
+        examples=["PV"],
+    )
+
+    reportes: list[ReporteCalculoItem] = Field(
+        ...,
+        description=(
+            "Reporte completo actualizado de todos "
+            "los extractos correspondientes al turno."
+        ),
+    )
+
+    cupones_ganadores_unicos: int = Field(
+        ...,
+        description=(
+            "Cantidad global de cupones ganadores "
+            "únicos para la fecha y turno."
+        ),
+        examples=[2435],
     )
