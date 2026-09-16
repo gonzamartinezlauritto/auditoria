@@ -20,16 +20,17 @@ def obtener_control_aciertos(
                 r.porcentaje_utilidad,
                 r.apuestas_premiadas,
 
-                COALESCE(dbf.generados_frontend, 0)
-                    AS generados_frontend,
-
-                COALESCE(dbf.importe_frontend, 0)
-                    AS importe_frontend,
+                COALESCE(
+                    dbf.generados_frontend,
+                    0
+                ) AS generados_frontend,
 
                 r.cupones_ganadores_unicos,
 
-                COALESCE(dbf.cupones_ganadores_dbf, 0)
-                    AS cupones_ganadores_dbf
+                COALESCE(
+                    dbf.cupones_ganadores_dbf,
+                    0
+                ) AS cupones_ganadores_dbf
 
             FROM resumen_auditoria r
 
@@ -40,11 +41,6 @@ def obtener_control_aciertos(
                     codigo_extracto,
 
                     COUNT(*) AS generados_frontend,
-
-                    COALESCE(
-                        SUM(impganado),
-                        0
-                    ) AS importe_frontend,
 
                     COUNT(
                         DISTINCT (
@@ -94,6 +90,7 @@ def obtener_control_aciertos(
 
         return cur.fetchall()
 
+
 def obtener_cupones_ganadores_unicos_frontend(
     conn: connection,
     fecha: int,
@@ -125,4 +122,61 @@ def obtener_cupones_ganadores_unicos_frontend(
             ),
         )
 
-        return cur.fetchone()[0] or 0
+        resultado = cur.fetchone()
+
+        return resultado[0] if resultado else 0
+
+
+def obtener_importe_total_frontend(
+    conn: connection,
+    fecha: int,
+    turno: str,
+):
+    """
+    Obtiene el importe total ganado según el DBF.
+
+    impganado representa el premio TOTAL del cupón
+    y puede aparecer repetido en varios extractos.
+
+    Por eso:
+    1. agrupamos globalmente por cupón
+    2. tomamos MAX(impganado)
+    3. recién después sumamos esos importes
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COALESCE(
+                SUM(t.importe_cupon),
+                0
+            )
+            FROM (
+                SELECT
+                    agencia,
+                    subagencia,
+                    nromaquina,
+                    numero,
+                    MAX(impganado) AS importe_cupon
+
+                FROM aciertos_dbf
+
+                WHERE fecha_sorteo = %s
+                  AND turno = %s
+
+                GROUP BY
+                    agencia,
+                    subagencia,
+                    nromaquina,
+                    numero
+            ) t
+            """,
+            (
+                fecha,
+                turno,
+            ),
+        )
+
+        resultado = cur.fetchone()
+
+        return resultado[0] if resultado else 0

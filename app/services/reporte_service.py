@@ -5,24 +5,12 @@ from app.core.transaction import transaction
 from app.repositories import reporte_repository
 
 
+TOLERANCIA_IMPORTE = Decimal("100.00")
+
+
 def _decimal_a_float(
     valor,
 ) -> float:
-    return float(
-        Decimal(
-            str(valor or 0)
-        )
-    )
-
-
-from decimal import Decimal
-from typing import Any
-
-from app.core.transaction import transaction
-from app.repositories import reporte_repository
-
-
-def _decimal_a_float(valor) -> float:
     return float(
         Decimal(
             str(valor or 0)
@@ -37,17 +25,33 @@ def obtener_control_aciertos(
     turno_normalizado = turno.upper().strip()
 
     with transaction() as conn:
-        rows = reporte_repository.obtener_control_aciertos(
-            conn=conn,
-            fecha=fecha,
-            turno=turno_normalizado,
-        )
-
-        cupones_unicos_dbf = (
-            reporte_repository.obtener_cupones_ganadores_unicos_frontend(
+        rows = (
+            reporte_repository
+            .obtener_control_aciertos(
                 conn=conn,
                 fecha=fecha,
                 turno=turno_normalizado,
+            )
+        )
+
+        cupones_unicos_dbf = (
+            reporte_repository
+            .obtener_cupones_ganadores_unicos_frontend(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+            )
+        )
+
+        importe_total_frontend = Decimal(
+            str(
+                reporte_repository
+                .obtener_importe_total_frontend(
+                    conn=conn,
+                    fecha=fecha,
+                    turno=turno_normalizado,
+                )
+                or 0
             )
         )
 
@@ -55,7 +59,6 @@ def obtener_control_aciertos(
 
     total_recaudacion = Decimal("0.00")
     total_aciertos = Decimal("0.00")
-    total_importe_frontend = Decimal("0.00")
     total_comision = Decimal("0.00")
     total_utilidad = Decimal("0.00")
 
@@ -76,7 +79,6 @@ def obtener_control_aciertos(
             porcentaje_utilidad,
             apuestas_premiadas,
             generados_frontend,
-            importe_frontend,
             cupones_ganadores_unicos,
             cupones_ganadores_dbf_por_extracto,
         ) = row
@@ -89,10 +91,6 @@ def obtener_control_aciertos(
             str(importe_premiados or 0)
         )
 
-        importe_frontend = Decimal(
-            str(importe_frontend or 0)
-        )
-
         comision = Decimal(
             str(comision or 0)
         )
@@ -103,7 +101,6 @@ def obtener_control_aciertos(
 
         total_recaudacion += recaudacion
         total_aciertos += importe_premiados
-        total_importe_frontend += importe_frontend
         total_comision += comision
         total_utilidad += utilidad
 
@@ -135,9 +132,6 @@ def obtener_control_aciertos(
                 "importe_aciertos": _decimal_a_float(
                     importe_premiados
                 ),
-                "importe_frontend": _decimal_a_float(
-                    importe_frontend
-                ),
                 "comision": _decimal_a_float(
                     comision
                 ),
@@ -156,11 +150,29 @@ def obtener_control_aciertos(
             }
         )
 
+    diferencia_importe = (
+        total_aciertos
+        - importe_total_frontend
+    ).quantize(
+        Decimal("0.01")
+    )
+
+    diferencia_absoluta = abs(
+        diferencia_importe
+    )
+
+    diferencia_importe_relevante = (
+        diferencia_absoluta
+        > TOLERANCIA_IMPORTE
+    )
+
     return {
         "ok": True,
         "fecha": fecha,
         "turno": turno_normalizado,
+
         "reportes": reportes,
+
         "totales": {
             "recaudacion": _decimal_a_float(
                 total_recaudacion
@@ -169,7 +181,16 @@ def obtener_control_aciertos(
                 total_aciertos
             ),
             "importe_frontend": _decimal_a_float(
-                total_importe_frontend
+                importe_total_frontend
+            ),
+            "diferencia_importe": _decimal_a_float(
+                diferencia_importe
+            ),
+            "diferencia_importe_relevante": (
+                diferencia_importe_relevante
+            ),
+            "tolerancia_importe": _decimal_a_float(
+                TOLERANCIA_IMPORTE
             ),
             "comision": _decimal_a_float(
                 total_comision
@@ -177,9 +198,14 @@ def obtener_control_aciertos(
             "utilidad": _decimal_a_float(
                 total_utilidad
             ),
-            "generados_frontend": total_generados_frontend,
-            "generados_auditoria": total_auditoria,
+            "generados_frontend": (
+                total_generados_frontend
+            ),
+            "generados_auditoria": (
+                total_auditoria
+            ),
         },
+
         "cupones_ganadores_unicos": {
             "frontend": int(
                 cupones_unicos_dbf or 0
@@ -189,4 +215,3 @@ def obtener_control_aciertos(
             ),
         },
     }
-
