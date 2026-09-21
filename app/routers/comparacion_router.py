@@ -36,7 +36,7 @@ def ejecutar_comparacion(
         Query(
             gt=0,
             description="Fecha del sorteo en formato AAAAMMDD.",
-            examples=[20260810],
+            examples=[20260910],
         ),
     ],
     turno: Annotated[

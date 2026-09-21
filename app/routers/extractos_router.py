@@ -19,17 +19,17 @@ from app.docs.extractos_docs import (
     MODIFICAR_EXTRACTOS_DOCS,
     MODIFICAR_EXTRACTOS_EXAMPLES,
 )
-from app.schemas.resultados_schema import (
+from app.schemas.extractos_schema import (
     CargarResultadosRequest,
     ModificarResultadosRequest,
     ModificarResultadosResponse,
 )
 from app.schemas.user_schema import CurrentUser
 from app.security.dependencies import require_role
-from app.services.resultados_service import (
-    cargar_resultados,
-    modificar_resultados,
-    obtener_resultados_por_fecha,
+from app.services.extractos_service import (
+    cargar_extractos,
+    modificar_extractos,
+    obtener_extractos_por_fecha,
 )
 
 
@@ -43,7 +43,7 @@ router = APIRouter(
     "/cargar",
     **CARGAR_EXTRACTOS_DOCS,
 )
-def cargar_resultados_endpoint(
+def cargar_extractos_endpoint(
     body: Annotated[
         CargarResultadosRequest,
         Body(
@@ -65,7 +65,7 @@ def cargar_resultados_endpoint(
         for item in body.resultados
     ]
 
-    return cargar_resultados(
+    return cargar_extractos(
         fecha=body.fecha,
         turno=body.turno,
         resultados=resultados,
@@ -76,7 +76,7 @@ def cargar_resultados_endpoint(
     "",
     **CONSULTAR_EXTRACTOS_DOCS,
 )
-def listar_resultados(
+def listar_extractos(
     fecha: Annotated[
         int,
         Query(
@@ -98,16 +98,17 @@ def listar_resultados(
         ),
     ],
 ):
-    return obtener_resultados_por_fecha(
+    return obtener_extractos_por_fecha(
         fecha=fecha,
     )
+
 
 @router.put(
     "/modificar",
     response_model=ModificarResultadosResponse,
     **MODIFICAR_EXTRACTOS_DOCS,
 )
-def modificar_resultados_endpoint(
+def modificar_extractos_endpoint(
     body: Annotated[
         ModificarResultadosRequest,
         Body(
@@ -131,7 +132,7 @@ def modificar_resultados_endpoint(
         for item in body.resultados
     ]
 
-    return modificar_resultados(
+    return modificar_extractos(
         fecha=body.fecha,
         turno=body.turno,
         resultados=resultados,

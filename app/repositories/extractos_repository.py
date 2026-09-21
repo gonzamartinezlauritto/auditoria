@@ -54,7 +54,7 @@ def insertar_resultado(
         )
 
 
-def obtener_resultados_por_fecha(
+def obtener_extractos_por_fecha(
     conn: connection,
     fecha: int,
 ) -> list[tuple]:

@@ -8,6 +8,10 @@ CARGAR_EXTRACTOS_DOCS = {
         "- Cada extracto debe contener exactamente 20 números.\n"
         "- Los números deben respetar el orden de salida del 1 al 20.\n"
         "- Los números deben enviarse como texto para conservar ceros iniciales.\n\n"
+        "**Protección del evento:**\n"
+        "Si el evento correspondiente a la fecha y turno se encuentra "
+        "cerrado, no se permite cargar nuevamente sus extractos. "
+        "El evento debe ser reabierto previamente por un usuario ADMIN.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
     "responses": {
@@ -17,10 +21,10 @@ CARGAR_EXTRACTOS_DOCS = {
                 "application/json": {
                     "example": {
                         "ok": True,
-                        "fecha": 20260810,
+                        "fecha": 20260910,
                         "turno": "PV",
-                        "extractos_cargados": 5,
-                        "resultados_insertados": 100,
+                        "extractos_cargados": 7,
+                        "resultados_insertados": 140,
                     }
                 }
             },
@@ -49,6 +53,24 @@ CARGAR_EXTRACTOS_DOCS = {
                         "message": (
                             "El usuario no posee permisos "
                             "para realizar esta operación"
+                        ),
+                    }
+                }
+            },
+        },
+        409: {
+            "description": (
+                "❌ El evento de auditoría se encuentra cerrado "
+                "y no puede ser modificado."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "ok": False,
+                        "code": "evento_cerrado",
+                        "message": (
+                            "El evento de auditoría se encuentra "
+                            "cerrado y no puede ser modificado"
                         ),
                     }
                 }
@@ -120,7 +142,7 @@ CARGAR_EXTRACTOS_EXAMPLES = {
             "en una única solicitud."
         ),
         "value": {
-            "fecha": 20260810,
+            "fecha": 20260910,
             "turno": "PV",
             "resultados": [
                 {
@@ -173,6 +195,26 @@ CARGAR_EXTRACTOS_EXAMPLES = {
                         "7577", "4966", "7103", "2758",
                     ],
                 },
+                {
+                    "codigo_extracto": 55,
+                    "numeros": [
+                        "1234", "5678", "9012", "3456",
+                        "7890", "1122", "3344", "5566",
+                        "7788", "9900", "1111", "2222",
+                        "3333", "4444", "5555", "6666",
+                        "7777", "8888", "9999", "0000",
+                    ],
+                },
+                {
+                    "codigo_extracto": 56,
+                    "numeros": [
+                        "1020", "2030", "3040", "4050",
+                        "5060", "6070", "7080", "8090",
+                        "9001", "1011", "2022", "3033",
+                        "4044", "5055", "6066", "7077",
+                        "8088", "9099", "1100", "2200",
+                    ],
+                },
             ],
         },
     },
@@ -184,6 +226,8 @@ CONSULTAR_EXTRACTOS_DOCS = {
     "description": (
         "Obtiene los resultados de los extractos cargados "
         "para una fecha determinada.\n\n"
+        "La consulta permanece disponible aunque el evento "
+        "de auditoría se encuentre cerrado.\n\n"
         "**Roles permitidos:** ADMIN, OPERADOR y CONSULTA."
     ),
     "responses": {
@@ -193,7 +237,7 @@ CONSULTAR_EXTRACTOS_DOCS = {
                 "application/json": {
                     "example": {
                         "ok": True,
-                        "fecha": 20260810,
+                        "fecha": 20260910,
                         "resultados": {
                             "PV": {
                                 "50": {
@@ -236,36 +280,70 @@ MODIFICAR_EXTRACTOS_DOCS = {
     "description": (
         "Permite corregir uno o varios extractos ya cargados. "
         "Cada extracto debe enviarse nuevamente con sus 20 "
-        "resultados completos. "
+        "resultados completos.\n\n"
         "El sistema detecta cuáles fueron modificados, "
         "reemplaza sus resultados, elimina sus aciertos "
         "calculados anteriormente y recalcula únicamente "
-        "los extractos afectados. "
-        "Finalmente devuelve el reporte completo actualizado "
-        "del turno."
+        "los extractos afectados. Finalmente devuelve el "
+        "reporte completo actualizado del turno.\n\n"
+        "**Protección del evento:**\n"
+        "Si el evento correspondiente a la fecha y turno se encuentra "
+        "cerrado, no se permite modificar sus extractos. "
+        "El evento debe ser reabierto previamente por un usuario ADMIN.\n\n"
+        "**Roles permitidos:** ADMIN y OPERADOR."
     ),
     "responses": {
         200: {
             "description": (
-                "Extractos modificados y cálculo actualizado "
+                "✅ Extractos modificados y cálculo actualizado "
                 "correctamente."
             ),
         },
         400: {
             "description": (
-                "Datos inválidos o cantidad incorrecta "
+                "❌ Datos inválidos o cantidad incorrecta "
                 "de resultados."
             ),
         },
+        401: {
+            "description": "❌ No autenticado.",
+        },
+        403: {
+            "description": "❌ Acceso denegado.",
+        },
         404: {
             "description": (
-                "No existen resultados cargados para "
+                "❌ No existen resultados cargados para "
                 "alguno de los extractos."
+            ),
+        },
+        409: {
+            "description": (
+                "❌ El evento de auditoría se encuentra cerrado "
+                "y no puede ser modificado."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "ok": False,
+                        "code": "evento_cerrado",
+                        "message": (
+                            "El evento de auditoría se encuentra "
+                            "cerrado y no puede ser modificado"
+                        ),
+                    }
+                }
+            },
+        },
+        422: {
+            "description": (
+                "❌ Cantidad de resultados inválida o "
+                "número de resultado incorrecto."
             ),
         },
         500: {
             "description": (
-                "Error interno al modificar y recalcular "
+                "❌ Error interno al modificar y recalcular "
                 "los extractos."
             ),
         },
@@ -282,7 +360,7 @@ MODIFICAR_EXTRACTOS_EXAMPLES = {
             "enviarse los 20 resultados."
         ),
         "value": {
-            "fecha": 20260810,
+            "fecha": 20260910,
             "turno": "PV",
             "resultados": [
                 {
@@ -321,7 +399,7 @@ MODIFICAR_EXTRACTOS_EXAMPLES = {
             "en una única operación."
         ),
         "value": {
-            "fecha": 20260810,
+            "fecha": 20260910,
             "turno": "PV",
             "resultados": [
                 {

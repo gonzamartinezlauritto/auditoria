@@ -3,7 +3,7 @@ from typing import Any
 from app.core.logger import logger
 from app.core.transaction import transaction
 from app.exceptions.base import AppException
-from app.exceptions.resultados_exceptions import (
+from app.exceptions.extractos_exceptions import (
     CantidadResultadosInvalidaError,
     ErrorProcesamientoResultados,
     NumeroResultadoInvalidoError,
@@ -11,15 +11,15 @@ from app.exceptions.resultados_exceptions import (
 )
 from app.repositories import (
     calculo_repository,
-    resultados_repository,
+    extractos_repository,
 )
 from app.services.calculo_service import (
     calcular_extracto,
     validar_precondiciones_calculo,
 )
-
 from app.services.auditoria_estado_service import (
     marcar_resultados_cargados,
+    validar_evento_abierto,
 )
 
 
@@ -39,6 +39,7 @@ def normalizar_numero(
         )
 
     return numero_normalizado.zfill(4)
+
 
 def _mapear_reportes_calculo(
     rows: list[tuple],
@@ -78,7 +79,8 @@ def _mapear_reportes_calculo(
 
     return reportes
 
-def cargar_resultados(
+
+def cargar_extractos(
     fecha: int,
     turno: str,
     resultados: list[dict[str, Any]],
@@ -90,6 +92,17 @@ def cargar_resultados(
 
     try:
         with transaction() as conn:
+
+            # =============================================
+            # PROTEGER EVENTOS CERRADOS
+            # =============================================
+
+            validar_evento_abierto(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+            )
+
             total_insertados = 0
 
             for item in resultados:
@@ -110,7 +123,7 @@ def cargar_resultados(
                         "Debe contener exactamente 20."
                     )
 
-                resultados_repository.eliminar_resultados_extracto(
+                extractos_repository.eliminar_resultados_extracto(
                     conn=conn,
                     fecha=fecha,
                     turno=turno_normalizado,
@@ -121,7 +134,7 @@ def cargar_resultados(
                     numeros,
                     start=1,
                 ):
-                    resultados_repository.insertar_resultado(
+                    extractos_repository.insertar_resultado(
                         conn=conn,
                         fecha=fecha,
                         turno=turno_normalizado,
@@ -139,7 +152,7 @@ def cargar_resultados(
             )
 
         logger.info(
-            "Resultados cargados: fecha=%s turno=%s "
+            "Extractos cargados: fecha=%s turno=%s "
             "extractos=%s resultados=%s",
             fecha,
             turno_normalizado,
@@ -160,28 +173,32 @@ def cargar_resultados(
 
     except Exception as error:
         logger.exception(
-            "Error al cargar resultados: fecha=%s turno=%s",
+            "Error al cargar extractos: fecha=%s turno=%s",
             fecha,
             turno_normalizado,
         )
 
         raise ErrorProcesamientoResultados(
-            "Error al cargar los resultados"
+            "Error al cargar los extractos"
         ) from error
 
-def obtener_resultados_por_fecha(
+
+def obtener_extractos_por_fecha(
     fecha: int,
 ) -> dict[str, Any]:
     try:
         with transaction() as conn:
             rows = (
-                resultados_repository.obtener_resultados_por_fecha(
+                extractos_repository.obtener_extractos_por_fecha(
                     conn=conn,
                     fecha=fecha,
                 )
             )
 
-        resultados_agrupados: dict[str, dict[int, dict[str, Any]]] = {}
+        extractos_agrupados: dict[
+            str,
+            dict[int, dict[str, Any]],
+        ] = {}
 
         for (
             turno,
@@ -190,14 +207,14 @@ def obtener_resultados_por_fecha(
             orden,
             numero,
         ) in rows:
-            if turno not in resultados_agrupados:
-                resultados_agrupados[turno] = {}
+            if turno not in extractos_agrupados:
+                extractos_agrupados[turno] = {}
 
             if (
                 codigo_extracto
-                not in resultados_agrupados[turno]
+                not in extractos_agrupados[turno]
             ):
-                resultados_agrupados[turno][
+                extractos_agrupados[turno][
                     codigo_extracto
                 ] = {
                     "codigo_extracto": codigo_extracto,
@@ -205,7 +222,7 @@ def obtener_resultados_por_fecha(
                     "numeros": [],
                 }
 
-            resultados_agrupados[turno][
+            extractos_agrupados[turno][
                 codigo_extracto
             ]["numeros"].append(
                 {
@@ -217,7 +234,7 @@ def obtener_resultados_por_fecha(
         return {
             "ok": True,
             "fecha": fecha,
-            "resultados": resultados_agrupados,
+            "resultados": extractos_agrupados,
         }
 
     except AppException:
@@ -225,15 +242,16 @@ def obtener_resultados_por_fecha(
 
     except Exception as error:
         logger.exception(
-            "Error al consultar resultados: fecha=%s",
+            "Error al consultar extractos: fecha=%s",
             fecha,
         )
 
         raise ErrorProcesamientoResultados(
-            "Error al consultar los resultados"
+            "Error al consultar los extractos"
         ) from error
 
-def modificar_resultados(
+
+def modificar_extractos(
     fecha: int,
     turno: str,
     resultados: list[dict[str, Any]],
@@ -245,6 +263,16 @@ def modificar_resultados(
 
     try:
         with transaction() as conn:
+
+            # =============================================
+            # PROTEGER EVENTOS CERRADOS
+            # =============================================
+
+            validar_evento_abierto(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+            )
 
             validar_precondiciones_calculo(
                 conn=conn,
@@ -297,7 +325,7 @@ def modificar_resultados(
                 # -----------------------------------------
 
                 actuales = (
-                    resultados_repository.obtener_resultados_extracto(
+                    extractos_repository.obtener_resultados_extracto(
                         conn=conn,
                         fecha=fecha,
                         turno=turno_normalizado,
@@ -325,10 +353,7 @@ def modificar_resultados(
                 # SI NO CAMBIÓ, NO RECALCULAMOS
                 # -----------------------------------------
 
-                if (
-                    numeros_actuales
-                    == numeros_nuevos
-                ):
+                if numeros_actuales == numeros_nuevos:
                     logger.info(
                         "Extracto sin cambios: "
                         "fecha=%s turno=%s extracto=%s",
@@ -343,7 +368,7 @@ def modificar_resultados(
                 # REEMPLAZAR RESULTADOS
                 # -----------------------------------------
 
-                resultados_repository.eliminar_resultados_extracto(
+                extractos_repository.eliminar_resultados_extracto(
                     conn=conn,
                     fecha=fecha,
                     turno=turno_normalizado,
@@ -354,7 +379,7 @@ def modificar_resultados(
                     numeros_nuevos,
                     start=1,
                 ):
-                    resultados_repository.insertar_resultado(
+                    extractos_repository.insertar_resultado(
                         conn=conn,
                         fecha=fecha,
                         turno=turno_normalizado,
@@ -425,7 +450,7 @@ def modificar_resultados(
             )
 
             # =============================================
-            # DEVOLVER LOS 7 EXTRACTOS
+            # DEVOLVER TODOS LOS EXTRACTOS
             # =============================================
 
             rows = (
@@ -441,7 +466,7 @@ def modificar_resultados(
             )
 
         logger.info(
-            "Modificación de resultados finalizada: "
+            "Modificación de extractos finalizada: "
             "fecha=%s turno=%s "
             "extractos_recibidos=%s "
             "extractos_recalculados=%s",
@@ -466,13 +491,12 @@ def modificar_resultados(
 
     except Exception as error:
         logger.exception(
-            "Error al modificar resultados: "
+            "Error al modificar extractos: "
             "fecha=%s turno=%s",
             fecha,
             turno_normalizado,
         )
 
         raise ErrorProcesamientoResultados(
-            "Error al modificar los resultados"
+            "Error al modificar los extractos"
         ) from error
-

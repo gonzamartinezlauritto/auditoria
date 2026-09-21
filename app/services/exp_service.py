@@ -14,7 +14,10 @@ from app.exceptions.exp_exceptions import (
     SinApuestasParaTurnoError,
 )
 from app.repositories import exp_repository
-from app.services.auditoria_estado_service import marcar_exp_cargado
+from app.services.auditoria_estado_service import (
+    marcar_exp_cargado,
+    validar_evento_abierto,
+)
 from app.services.file_service import (
     guardar_upload,
     obtener_nombre_seguro,
@@ -168,6 +171,17 @@ def process_exp_fast(
 
     try:
         with transaction() as conn:
+
+            # ========================================================
+            # VALIDAR QUE EL EVENTO NO ESTÉ CERRADO
+            # ========================================================
+
+            validar_evento_abierto(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+            )
+
             inicio = time.perf_counter()
 
             exp_repository.crear_tabla_temporal(
@@ -372,10 +386,7 @@ def process_exp_fast(
             ),
             "turnos_ignorados": turnos_ignorados,
             "cargados_turno": cargados_turno,
-
-            # NUEVO
             "extractos": resumen_extractos,
-
             "modo": (
                 "copy_tmp_filter_valid_turns_"
                 "insert_on_conflict_do_nothing"

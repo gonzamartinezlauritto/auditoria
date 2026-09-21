@@ -1,6 +1,10 @@
 from psycopg2.extensions import connection
 
 
+# =========================================================
+# MARCAR EXP CARGADO
+# =========================================================
+
 def marcar_exp_cargado(
     conn: connection,
     fecha: int,
@@ -33,6 +37,10 @@ def marcar_exp_cargado(
             ),
         )
 
+
+# =========================================================
+# MARCAR DBF CARGADO
+# =========================================================
 
 def marcar_dbf_cargado(
     conn: connection,
@@ -67,6 +75,10 @@ def marcar_dbf_cargado(
         )
 
 
+# =========================================================
+# MARCAR RESULTADOS CARGADOS
+# =========================================================
+
 def marcar_resultados_cargados(
     conn: connection,
     fecha: int,
@@ -93,6 +105,10 @@ def marcar_resultados_cargados(
             ),
         )
 
+
+# =========================================================
+# MARCAR CÁLCULO EJECUTADO
+# =========================================================
 
 def marcar_calculo_ejecutado(
     conn: connection,
@@ -123,6 +139,37 @@ def marcar_calculo_ejecutado(
         )
 
 
+# =========================================================
+# MARCAR COMPARACIÓN EJECUTADA
+# =========================================================
+
+def marcar_comparacion_ejecutada(
+    conn: connection,
+    fecha: int,
+    turno: str,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE auditoria_cargas
+            SET
+                comparacion_ejecutada = TRUE,
+                fecha_comparacion = NOW(),
+                updated_at = NOW()
+            WHERE fecha_sorteo = %s
+              AND turno = %s
+            """,
+            (
+                fecha,
+                turno,
+            ),
+        )
+
+
+# =========================================================
+# OBTENER ESTADO POR FECHA
+# =========================================================
+
 def obtener_estado_por_fecha(
     conn: connection,
     fecha: int,
@@ -133,18 +180,36 @@ def obtener_estado_por_fecha(
             SELECT
                 fecha_sorteo,
                 turno,
+
                 exp_cargado,
                 resultados_cargados,
                 dbf_cargado,
                 calculo_ejecutado,
+
                 archivo_exp,
                 archivo_dbf,
+
                 fecha_exp,
                 fecha_dbf,
                 fecha_calculo,
+
+                comparacion_ejecutada,
+                fecha_comparacion,
+
+                evento_cerrado,
+                fecha_cierre,
+                cerrado_por,
+
+                fecha_reapertura,
+                reabierto_por,
+                motivo_reapertura,
+
                 updated_at
+
             FROM auditoria_cargas
+
             WHERE fecha_sorteo = %s
+
             ORDER BY
                 CASE turno
                     WHEN 'PV' THEN 1
@@ -157,6 +222,203 @@ def obtener_estado_por_fecha(
             """,
             (
                 fecha,
+            ),
+        )
+
+        return cur.fetchall()
+
+
+# =========================================================
+# OBTENER EVENTO ESPECÍFICO
+# =========================================================
+
+def obtener_evento(
+    conn: connection,
+    fecha: int,
+    turno: str,
+):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                fecha_sorteo,
+                turno,
+
+                exp_cargado,
+                resultados_cargados,
+                dbf_cargado,
+                calculo_ejecutado,
+
+                comparacion_ejecutada,
+                evento_cerrado,
+
+                fecha_comparacion,
+
+                fecha_cierre,
+                cerrado_por,
+
+                fecha_reapertura,
+                reabierto_por,
+                motivo_reapertura
+
+            FROM auditoria_cargas
+
+            WHERE fecha_sorteo = %s
+              AND turno = %s
+            """,
+            (
+                fecha,
+                turno,
+            ),
+        )
+
+        return cur.fetchone()
+
+
+# =========================================================
+# CERRAR EVENTO
+# =========================================================
+
+def cerrar_evento(
+    conn: connection,
+    fecha: int,
+    turno: str,
+    usuario: str,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE auditoria_cargas
+            SET
+                evento_cerrado = TRUE,
+                fecha_cierre = NOW(),
+                cerrado_por = %s,
+                updated_at = NOW()
+            WHERE fecha_sorteo = %s
+              AND turno = %s
+            """,
+            (
+                usuario,
+                fecha,
+                turno,
+            ),
+        )
+
+
+# =========================================================
+# REABRIR EVENTO
+# =========================================================
+
+def reabrir_evento(
+    conn: connection,
+    fecha: int,
+    turno: str,
+    usuario: str,
+    motivo: str,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE auditoria_cargas
+            SET
+                evento_cerrado = FALSE,
+
+                fecha_reapertura = NOW(),
+                reabierto_por = %s,
+                motivo_reapertura = %s,
+
+                comparacion_ejecutada = FALSE,
+                fecha_comparacion = NULL,
+
+                updated_at = NOW()
+
+            WHERE fecha_sorteo = %s
+              AND turno = %s
+            """,
+            (
+                usuario,
+                motivo,
+                fecha,
+                turno,
+            ),
+        )
+
+
+# =========================================================
+# REGISTRAR HISTORIAL DEL EVENTO
+# =========================================================
+
+def registrar_historial_evento(
+    conn: connection,
+    fecha: int,
+    turno: str,
+    accion: str,
+    usuario: str,
+    motivo: str | None = None,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO auditoria_eventos_historial (
+                fecha_sorteo,
+                turno,
+                accion,
+                usuario,
+                motivo,
+                created_at
+            )
+            VALUES (
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                NOW()
+            )
+            """,
+            (
+                fecha,
+                turno,
+                accion,
+                usuario,
+                motivo,
+            ),
+        )
+
+
+# =========================================================
+# OBTENER HISTORIAL DEL EVENTO
+# =========================================================
+
+def obtener_historial_evento(
+    conn: connection,
+    fecha: int,
+    turno: str,
+) -> list[tuple]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                id,
+                fecha_sorteo,
+                turno,
+                accion,
+                usuario,
+                motivo,
+                created_at
+
+            FROM auditoria_eventos_historial
+
+            WHERE fecha_sorteo = %s
+              AND turno = %s
+
+            ORDER BY
+                created_at DESC,
+                id DESC
+            """,
+            (
+                fecha,
+                turno,
             ),
         )
 

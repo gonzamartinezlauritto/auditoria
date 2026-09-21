@@ -31,6 +31,9 @@ UPLOAD_EXP_DOCS = {
     "description": (
         "Sube un archivo con extensión `.exp` al servidor "
         "sin ejecutar el procesamiento de apuestas.\n\n"
+        "Este endpoint únicamente almacena el archivo y no modifica "
+        "el estado ni los datos del evento de auditoría. Por este motivo, "
+        "la existencia de un evento cerrado no impide utilizar esta operación.\n\n"
         "**Archivo permitido:** `.exp`\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
@@ -99,6 +102,11 @@ PROCESS_EXP_DOCS = {
         "válidas del archivo en la base de datos.\n\n"
         "Los registros cuyo turno no pertenezca a los turnos "
         "permitidos son ignorados sin interrumpir la carga.\n\n"
+        "**Protección del evento:**\n"
+        "Si el evento correspondiente a la fecha y turno se encuentra "
+        "cerrado, el procesamiento es rechazado. Para volver a procesar "
+        "información del evento, un usuario ADMIN debe reabrirlo previamente "
+        "indicando el motivo de la reapertura.\n\n"
         "**Turnos válidos:** PV, PR, M, V y N.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
@@ -110,14 +118,25 @@ PROCESS_EXP_DOCS = {
                     "example": {
                         "ok": True,
                         "archivo_origen": "quiniela.exp",
-                        "fecha": 20260810,
+                        "fecha": 20260910,
                         "turno": "PV",
                         "total_archivo": 125000,
+                        "total_turnos_validos": 124800,
                         "insertados": 124800,
-                        "ignorados_por_duplicado": 200,
+                        "ignorados_turno_invalido": 200,
+                        "ignorados_por_duplicado": 0,
+                        "turnos_ignorados": [],
                         "cargados_turno": 30125,
+                        "extractos": [
+                            {
+                                "codigo_extracto": 50,
+                                "cupones_jugados": 14360,
+                                "recaudacion": 11838051.00,
+                            }
+                        ],
                         "modo": (
-                            "copy_tmp_insert_on_conflict_do_nothing"
+                            "copy_tmp_filter_valid_turns_"
+                            "insert_on_conflict_do_nothing"
                         ),
                     }
                 }
@@ -142,6 +161,24 @@ PROCESS_EXP_DOCS = {
         },
         403: {
             "description": "❌ Acceso denegado.",
+        },
+        409: {
+            "description": (
+                "❌ El evento de auditoría se encuentra cerrado "
+                "y no puede ser modificado."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "ok": False,
+                        "code": "evento_cerrado",
+                        "message": (
+                            "El evento de auditoría se encuentra "
+                            "cerrado y no puede ser modificado"
+                        ),
+                    }
+                }
+            },
         },
         422: {
             "description": (
@@ -175,6 +212,11 @@ PROCESS_EXP_ZIP_DOCS = {
         "contenido dentro del ZIP y ejecuta su procesamiento.\n\n"
         "Si el ZIP contiene `quiniela.exp`, ese archivo tiene prioridad. "
         "Si no, se utiliza el primer archivo con extensión `.exp` encontrado.\n\n"
+        "**Protección del evento:**\n"
+        "Si el evento correspondiente a la fecha y turno se encuentra "
+        "cerrado, el EXP extraído no puede ser procesado. Para volver a "
+        "procesar información del evento, un usuario ADMIN debe reabrirlo "
+        "previamente indicando el motivo de la reapertura.\n\n"
         "**Archivo permitido:** `.zip`\n\n"
         "**Turnos válidos:** PV, PR, M, V y N.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
@@ -187,16 +229,23 @@ PROCESS_EXP_ZIP_DOCS = {
                     "example": {
                         "ok": True,
                         "archivo_origen": "quiniela.exp",
-                        "fecha": 20260810,
+                        "fecha": 20260910,
                         "turno": "PV",
                         "total_archivo": 125000,
                         "insertados": 124800,
                         "ignorados_por_duplicado": 200,
                         "cargados_turno": 30125,
+                        "extractos": [
+                            {
+                                "codigo_extracto": 50,
+                                "cupones_jugados": 14360,
+                                "recaudacion": 11838051.00,
+                            }
+                        ],
                         "zip": {
                             "archivo_zip": "quiniela.zip",
                             "archivo_exp": "quiniela.exp",
-                            "carpeta": "uploads/20260810/PV/exp",
+                            "carpeta": "uploads/20260910/PV/exp",
                         },
                     }
                 }
@@ -247,6 +296,24 @@ PROCESS_EXP_ZIP_DOCS = {
                         "message": (
                             "No se encontró el archivo quiniela.exp "
                             "dentro del ZIP"
+                        ),
+                    }
+                }
+            },
+        },
+        409: {
+            "description": (
+                "❌ El evento de auditoría se encuentra cerrado "
+                "y no puede ser modificado."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "ok": False,
+                        "code": "evento_cerrado",
+                        "message": (
+                            "El evento de auditoría se encuentra "
+                            "cerrado y no puede ser modificado"
                         ),
                     }
                 }

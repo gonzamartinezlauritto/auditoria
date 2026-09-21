@@ -13,6 +13,9 @@ from app.repositories import (
     auditoria_repository,
     comparacion_repository,
 )
+from app.services.auditoria_estado_service import (
+    validar_evento_abierto,
+)
 
 
 CENTAVO = Decimal("0.01")
@@ -270,6 +273,21 @@ def comparar_sistema_con_dbf(
 
     try:
         with transaction() as conn:
+
+            # ========================================================
+            # PROTEGER EVENTOS CERRADOS
+            # ========================================================
+
+            validar_evento_abierto(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+            )
+
+            # ========================================================
+            # VALIDAR PRECONDICIONES
+            # ========================================================
+
             estado = (
                 auditoria_repository
                 .obtener_estado_por_fecha(
@@ -452,6 +470,16 @@ def comparar_sistema_con_dbf(
                 fecha=fecha,
                 turno=turno_normalizado,
                 cantidad=cupones_unicos_dbf,
+            )
+
+            # ========================================================
+            # MARCAR COMPARACIÓN COMO EJECUTADA
+            # ========================================================
+
+            auditoria_repository.marcar_comparacion_ejecutada(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
             )
 
         # ============================================================

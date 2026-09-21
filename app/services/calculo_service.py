@@ -2,6 +2,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from app.core.logger import logger
+from app.core.transaction import transaction
 from app.exceptions.base import AppException
 from app.exceptions.calculo_exceptions import (
     ErrorProcesamientoCalculo,
@@ -10,10 +11,10 @@ from app.exceptions.calculo_exceptions import (
     ResultadosNoEncontradosError,
     SinExtractosParaCalcularError,
 )
-from app.core.transaction import transaction
 from app.repositories import calculo_repository
 from app.services.auditoria_estado_service import (
     marcar_calculo_ejecutado,
+    validar_evento_abierto,
 )
 from app.services.premios_service import (
     buscar_aproximado,
@@ -66,7 +67,7 @@ def validar_precondiciones_calculo(
     if not resultados_cargados:
         raise PrecondicionesCalculoError(
             "No se puede calcular: "
-            "faltan cargar los resultados para "
+            "faltan cargar los extractos para "
             f"fecha={fecha}, turno={turno}"
         )
 
@@ -692,16 +693,7 @@ def calcular_extracto(
             codigo_extracto=cod,
         )
     )
-    """
-    archivo_aciertos_dbf = (
-        calculo_repository.contar_aciertos_dbf_extracto(
-            conn=conn,
-            fecha=fecha,
-            turno=turno_normalizado,
-            codigo_extracto=cod,
-        )
-    )
-    """
+
     return {
         "codigo_extracto": cod,
         "sorteo": nombre_extracto,
@@ -725,7 +717,9 @@ def guardar_resumen_auditoria(
             fecha=fecha,
             turno=turno,
             reporte=reporte,
-            cupones_ganadores_unicos= cupones_ganadores_unicos
+            cupones_ganadores_unicos=(
+                cupones_ganadores_unicos
+            ),
         )
 
 
@@ -739,6 +733,17 @@ def calcular_por_fecha_turno(
 
     try:
         with transaction() as conn:
+
+            # =============================================
+            # PROTEGER EVENTOS CERRADOS
+            # =============================================
+
+            validar_evento_abierto(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+            )
+
             validar_precondiciones_calculo(
                 conn=conn,
                 fecha=fecha,
@@ -780,21 +785,15 @@ def calcular_por_fecha_turno(
                     turno=turno_normalizado,
                 )
             )
-            """
-            cupones_ganadores_dbf = (
-                calculo_repository.contar_cupones_ganadores_unicos_dbf(
-                    conn=conn,
-                    fecha=fecha,
-                    turno=turno_normalizado,
-                )
-            )
-            """
+
             guardar_resumen_auditoria(
                 conn=conn,
                 fecha=fecha,
                 turno=turno_normalizado,
                 reportes=reportes,
-                cupones_ganadores_unicos= cupones_ganadores_unicos
+                cupones_ganadores_unicos=(
+                    cupones_ganadores_unicos
+                ),
             )
 
             marcar_calculo_ejecutado(
@@ -867,12 +866,16 @@ def obtener_resumen_por_fecha(
                     "turno": turno,
                     "cupones_ganadores_unicos": int(
                         cupones_ganadores_unicos
+                        or 0
                     ),
                     "cupones_ganadores_dbf": int(
                         cupones_ganadores_dbf
+                        or 0
                     ),
-                    "fecha_calculo": str(
-                        fecha_calculo
+                    "fecha_calculo": (
+                        str(fecha_calculo)
+                        if fecha_calculo
+                        else None
                     ),
                     "reportes": [],
                 }
@@ -887,27 +890,35 @@ def obtener_resumen_por_fecha(
                     "sorteo": sorteo,
                     "cupones_jugados": int(
                         cupones_jugados
+                        or 0
                     ),
                     "recaudacion": float(
                         recaudacion
+                        or 0
                     ),
                     "importe_premiados": float(
                         importe_premiados
+                        or 0
                     ),
                     "comision": float(
                         comision
+                        or 0
                     ),
                     "utilidad": float(
                         utilidad
+                        or 0
                     ),
                     "porcentaje_utilidad": float(
                         porcentaje_utilidad
+                        or 0
                     ),
                     "apuestas_premiadas": int(
                         apuestas_premiadas
+                        or 0
                     ),
                     "archivo_aciertos_dbf": int(
                         archivo_aciertos_dbf
+                        or 0
                     ),
                 }
             )

@@ -11,6 +11,10 @@ PROCESS_DBF_DOCS = {
         "3. Ejecutar el cálculo del sistema.\n"
         "4. Cargar y procesar el DBF.\n"
         "5. Ejecutar la comparación.\n\n"
+        "**Protección del evento:**\n"
+        "Si el evento correspondiente a la fecha y turno se encuentra "
+        "cerrado, no se permite cargar ni reemplazar el DBF. "
+        "El evento debe ser reabierto previamente por un usuario ADMIN.\n\n"
         "**Turnos válidos:** PV, PR, M, V y N.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
@@ -75,6 +79,24 @@ PROCESS_DBF_DOCS = {
         403: {
             "description": "❌ Acceso denegado.",
         },
+        409: {
+            "description": (
+                "❌ El evento de auditoría se encuentra cerrado "
+                "y no puede ser modificado."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "ok": False,
+                        "code": "evento_cerrado",
+                        "message": (
+                            "El evento de auditoría se encuentra "
+                            "cerrado y no puede ser modificado"
+                        ),
+                    }
+                }
+            },
+        },
         422: {
             "description": (
                 "❌ Parámetros de entrada inválidos "
@@ -103,6 +125,10 @@ PROCESS_DBF_ZIP_DOCS = {
         "3. Ejecutar el cálculo del sistema.\n"
         "4. Cargar y procesar el ZIP del DBF.\n"
         "5. Ejecutar la comparación.\n\n"
+        "**Protección del evento:**\n"
+        "Si el evento correspondiente a la fecha y turno se encuentra "
+        "cerrado, no se permite cargar ni reemplazar el DBF. "
+        "El evento debe ser reabierto previamente por un usuario ADMIN.\n\n"
         "**Archivo permitido:** `.zip`\n\n"
         "**Turnos válidos:** PV, PR, M, V y N.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
@@ -204,6 +230,24 @@ PROCESS_DBF_ZIP_DOCS = {
                         "message": (
                             "No se encontró archivo .dbf "
                             "dentro del ZIP"
+                        ),
+                    }
+                }
+            },
+        },
+        409: {
+            "description": (
+                "❌ El evento de auditoría se encuentra cerrado "
+                "y no puede ser modificado."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "ok": False,
+                        "code": "evento_cerrado",
+                        "message": (
+                            "El evento de auditoría se encuentra "
+                            "cerrado y no puede ser modificado"
                         ),
                     }
                 }

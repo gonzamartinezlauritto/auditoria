@@ -6,6 +6,10 @@ RUN_CALCULO_DOCS = {
         "- El archivo EXP debe estar cargado.\n"
         "- Los extractos correspondientes deben estar cargados.\n"
         "- El DBF no es necesario para ejecutar el cálculo.\n\n"
+        "**Protección del evento:**\n"
+        "Si el evento correspondiente a la fecha y turno se encuentra "
+        "cerrado, no se permite ejecutar nuevamente el cálculo. "
+        "El evento debe ser reabierto previamente por un usuario ADMIN.\n\n"
         "El resultado generado por el sistema se utiliza posteriormente "
         "para compararlo contra el DBF oficial.\n\n"
         "**Turnos válidos:** PV, PR, M, V y N.\n\n"
@@ -73,6 +77,24 @@ RUN_CALCULO_DOCS = {
         403: {
             "description": "❌ Acceso denegado.",
         },
+        409: {
+            "description": (
+                "❌ El evento de auditoría se encuentra cerrado "
+                "y no puede ser modificado."
+            ),
+            "content": {
+                "application/json": {
+                    "example": {
+                        "ok": False,
+                        "code": "evento_cerrado",
+                        "message": (
+                            "El evento de auditoría se encuentra "
+                            "cerrado y no puede ser modificado"
+                        ),
+                    }
+                }
+            },
+        },
         422: {
             "description": (
                 "❌ No se cumplen las precondiciones para ejecutar "
@@ -103,7 +125,7 @@ RUN_CALCULO_DOCS = {
                                 ),
                                 "message": (
                                     "No se puede calcular: faltan cargar "
-                                    "los resultados para fecha=20260810, "
+                                    "los extractos para fecha=20260810, "
                                     "turno=PV"
                                 ),
                             },
@@ -148,6 +170,8 @@ RESUMEN_CALCULO_DOCS = {
         "realizados para una fecha determinada.\n\n"
         "El resumen contiene información de recaudación, premios, "
         "comisión, utilidad y cantidades calculadas por extracto.\n\n"
+        "La consulta permanece disponible aunque el evento de "
+        "auditoría se encuentre cerrado.\n\n"
         "**Roles permitidos:** ADMIN, OPERADOR y CONSULTA."
     ),
     "responses": {

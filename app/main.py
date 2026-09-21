@@ -16,8 +16,8 @@ from app.routers.calculo_router import router as calculo_router
 from app.routers.comparacion_router import router as comparacion_router
 from app.routers.dbf_router import router as dbf_router
 from app.routers.exp_router import router as exp_router
+from app.routers.extractos_router import router as extractos_router
 from app.routers.reporte_router import router as reporte_router
-from app.routers.resultados_router import router as resultados_router
 from app.routers.users_router import router as users_router
 from app.services.bootstrap_service import crear_admin_inicial
 
@@ -56,7 +56,7 @@ app.add_exception_handler(
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(exp_router)
-app.include_router(resultados_router)
+app.include_router(extractos_router)
 app.include_router(calculo_router)
 app.include_router(dbf_router)
 app.include_router(comparacion_router)

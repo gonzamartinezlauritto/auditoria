@@ -17,6 +17,7 @@ from app.exceptions.dbf_exceptions import (
 from app.repositories import dbf_repository
 from app.services.auditoria_estado_service import (
     marcar_dbf_cargado,
+    validar_evento_abierto,
 )
 from app.services.file_service import (
     guardar_upload,
@@ -160,6 +161,17 @@ def process_dbf(
             raise ArchivoDbfInvalidoError() from error
 
         with transaction() as conn:
+
+            # =============================================
+            # PROTEGER EVENTOS CERRADOS
+            # =============================================
+
+            validar_evento_abierto(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+            )
+
             dbf_repository.eliminar_aciertos_por_fecha_turno(
                 conn=conn,
                 fecha=fecha,

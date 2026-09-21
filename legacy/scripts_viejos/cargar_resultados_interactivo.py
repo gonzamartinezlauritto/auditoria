@@ -15,7 +15,7 @@ def obtener_nombre_extracto(cur, codigo_extracto: int) -> str:
     return f"{provincia} - {nombre_extracto}"
 
 
-def cargar_resultados(fecha_sorteo: int, codigo_extracto: int, numeros: list[str]) -> None:
+def cargar_extractos(fecha_sorteo: int, codigo_extracto: int, numeros: list[str]) -> None:
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
 
@@ -78,7 +78,7 @@ def main() -> None:
                 numeros.append(numero)
                 break
 
-        cargar_resultados(fecha_sorteo, codigo_extracto, numeros)
+        cargar_extractos(fecha_sorteo, codigo_extracto, numeros)
 
         print(f"\n✔ Resultados guardados correctamente para {nombre}.")
 

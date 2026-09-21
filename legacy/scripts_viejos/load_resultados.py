@@ -1,7 +1,7 @@
 import psycopg2
 from legacy.scripts_viejos.config import DB_CONFIG
 
-def cargar_resultados(fecha_sorteo: int, codigo_extracto: int, numeros: list[str]) -> None:
+def cargar_extractos(fecha_sorteo: int, codigo_extracto: int, numeros: list[str]) -> None:
     if len(numeros) != 20:
         raise ValueError("Se deben informar exactamente 20 números.")
 
