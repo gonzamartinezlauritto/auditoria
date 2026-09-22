@@ -16,6 +16,7 @@ from app.exceptions.dbf_exceptions import (
 )
 from app.repositories import dbf_repository
 from app.services.auditoria_estado_service import (
+    invalidar_comparacion,
     marcar_dbf_cargado,
     validar_evento_abierto,
 )
@@ -172,6 +173,10 @@ def process_dbf(
                 turno=turno_normalizado,
             )
 
+            # =============================================
+            # ELIMINAR DBF ANTERIOR
+            # =============================================
+
             dbf_repository.eliminar_aciertos_por_fecha_turno(
                 conn=conn,
                 fecha=fecha,
@@ -179,6 +184,10 @@ def process_dbf(
             )
 
             insertados = 0
+
+            # =============================================
+            # INSERTAR NUEVO DBF
+            # =============================================
 
             for row in tabla:
                 dbf_repository.insertar_acierto(
@@ -232,11 +241,36 @@ def process_dbf(
                 )
             )
 
+            # =============================================
+            # MARCAR DBF CARGADO
+            # =============================================
+
             marcar_dbf_cargado(
                 conn=conn,
                 fecha=fecha,
                 turno=turno_normalizado,
                 archivo_dbf=file_path.name,
+            )
+
+            # =============================================
+            # INVALIDAR COMPARACIÓN ANTERIOR
+            # =============================================
+            #
+            # El DBF representa la información oficial
+            # contra la cual se compara la auditoría.
+            #
+            # Al volver a cargarlo:
+            #
+            # - el cálculo del sistema sigue siendo válido
+            # - la comparación anterior deja de ser válida
+            #
+            # Por eso solamente invalidamos comparación.
+            # =============================================
+
+            invalidar_comparacion(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
             )
 
         tiempo_total = round(

@@ -18,6 +18,8 @@ from app.services.calculo_service import (
     validar_precondiciones_calculo,
 )
 from app.services.auditoria_estado_service import (
+    invalidar_calculo_y_comparacion,
+    invalidar_comparacion,
     marcar_resultados_cargados,
     validar_evento_abierto,
 )
@@ -145,7 +147,29 @@ def cargar_extractos(
 
                     total_insertados += 1
 
+            # =============================================
+            # MARCAR RESULTADOS CARGADOS
+            # =============================================
+
             marcar_resultados_cargados(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+            )
+
+            # =============================================
+            # INVALIDAR CÁLCULO Y COMPARACIÓN
+            # =============================================
+            #
+            # Los resultados fueron cargados/reemplazados.
+            # Por lo tanto, cualquier cálculo realizado con
+            # resultados anteriores deja de ser válido.
+            #
+            # Como la comparación depende del cálculo,
+            # también debe volver a ejecutarse.
+            # =============================================
+
+            invalidar_calculo_y_comparacion(
                 conn=conn,
                 fecha=fecha,
                 turno=turno_normalizado,
@@ -409,6 +433,28 @@ def modificar_extractos(
                     fecha,
                     turno_normalizado,
                     codigo_extracto,
+                )
+
+            # =============================================
+            # INVALIDAR COMPARACIÓN SOLO SI HUBO CAMBIOS
+            # =============================================
+            #
+            # modificar_extractos ya recalcula cada extracto
+            # realmente modificado. Por eso el cálculo sigue
+            # siendo válido.
+            #
+            # Sin embargo, la comparación anterior contra el
+            # DBF deja de ser válida.
+            #
+            # Si todos los extractos recibidos eran iguales
+            # a los almacenados, no invalidamos nada.
+            # =============================================
+
+            if reportes_recalculados:
+                invalidar_comparacion(
+                    conn=conn,
+                    fecha=fecha,
+                    turno=turno_normalizado,
                 )
 
             # =============================================

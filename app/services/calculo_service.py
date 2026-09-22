@@ -13,6 +13,7 @@ from app.exceptions.calculo_exceptions import (
 )
 from app.repositories import calculo_repository
 from app.services.auditoria_estado_service import (
+    invalidar_comparacion,
     marcar_calculo_ejecutado,
     validar_evento_abierto,
 )
@@ -796,7 +797,29 @@ def calcular_por_fecha_turno(
                 ),
             )
 
+            # =============================================
+            # MARCAR CÁLCULO EJECUTADO
+            # =============================================
+
             marcar_calculo_ejecutado(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+            )
+
+            # =============================================
+            # INVALIDAR COMPARACIÓN ANTERIOR
+            # =============================================
+            #
+            # Si se vuelve a ejecutar el cálculo,
+            # los premios del sistema pueden haber cambiado.
+            #
+            # Por lo tanto, cualquier comparación realizada
+            # anteriormente deja de ser válida y debe volver
+            # a ejecutarse antes de cerrar el evento.
+            # =============================================
+
+            invalidar_comparacion(
                 conn=conn,
                 fecha=fecha,
                 turno=turno_normalizado,

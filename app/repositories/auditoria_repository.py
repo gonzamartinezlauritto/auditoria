@@ -167,6 +167,62 @@ def marcar_comparacion_ejecutada(
 
 
 # =========================================================
+# INVALIDAR COMPARACIÓN
+# =========================================================
+
+def invalidar_comparacion(
+    conn: connection,
+    fecha: int,
+    turno: str,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE auditoria_cargas
+            SET
+                comparacion_ejecutada = FALSE,
+                fecha_comparacion = NULL,
+                updated_at = NOW()
+            WHERE fecha_sorteo = %s
+              AND turno = %s
+            """,
+            (
+                fecha,
+                turno,
+            ),
+        )
+
+
+# =========================================================
+# INVALIDAR CÁLCULO Y COMPARACIÓN
+# =========================================================
+
+def invalidar_calculo_y_comparacion(
+    conn: connection,
+    fecha: int,
+    turno: str,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE auditoria_cargas
+            SET
+                calculo_ejecutado = FALSE,
+                fecha_calculo = NULL,
+                comparacion_ejecutada = FALSE,
+                fecha_comparacion = NULL,
+                updated_at = NOW()
+            WHERE fecha_sorteo = %s
+              AND turno = %s
+            """,
+            (
+                fecha,
+                turno,
+            ),
+        )
+
+
+# =========================================================
 # OBTENER ESTADO POR FECHA
 # =========================================================
 

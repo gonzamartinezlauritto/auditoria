@@ -85,6 +85,34 @@ def marcar_comparacion_ejecutada(
 
 
 # =========================================================
+# INVALIDACIÓN DE ETAPAS
+# =========================================================
+
+def invalidar_comparacion(
+    conn: connection,
+    fecha: int,
+    turno: str,
+) -> None:
+    auditoria_repository.invalidar_comparacion(
+        conn=conn,
+        fecha=fecha,
+        turno=turno,
+    )
+
+
+def invalidar_calculo_y_comparacion(
+    conn: connection,
+    fecha: int,
+    turno: str,
+) -> None:
+    auditoria_repository.invalidar_calculo_y_comparacion(
+        conn=conn,
+        fecha=fecha,
+        turno=turno,
+    )
+
+
+# =========================================================
 # VALIDAR EVENTO ABIERTO
 # =========================================================
 

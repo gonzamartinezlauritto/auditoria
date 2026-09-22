@@ -15,6 +15,7 @@ from app.exceptions.exp_exceptions import (
 )
 from app.repositories import exp_repository
 from app.services.auditoria_estado_service import (
+    invalidar_calculo_y_comparacion,
     marcar_exp_cargado,
     validar_evento_abierto,
 )
@@ -335,11 +336,32 @@ def process_exp_fast(
 
             inicio = time.perf_counter()
 
+            # ========================================================
+            # MARCAR EXP CARGADO
+            # ========================================================
+
             marcar_exp_cargado(
                 conn=conn,
                 fecha=fecha,
                 turno=turno_normalizado,
                 archivo_exp=archivo_origen,
+            )
+
+            # ========================================================
+            # INVALIDAR CÁLCULO Y COMPARACIÓN ANTERIORES
+            # ========================================================
+            #
+            # Si se vuelve a procesar el EXP, cualquier cálculo
+            # realizado anteriormente deja de ser válido.
+            #
+            # Como la comparación depende del cálculo, también
+            # debe volver a ejecutarse.
+            # ========================================================
+
+            invalidar_calculo_y_comparacion(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
             )
 
             tiempos["marcar_exp_segundos"] = round(
