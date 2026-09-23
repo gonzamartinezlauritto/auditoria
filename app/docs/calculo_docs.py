@@ -10,14 +10,25 @@ RUN_CALCULO_DOCS = {
         "Si el evento correspondiente a la fecha y turno se encuentra "
         "cerrado, no se permite ejecutar nuevamente el cálculo. "
         "El evento debe ser reabierto previamente por un usuario ADMIN.\n\n"
-        "El resultado generado por el sistema se utiliza posteriormente "
-        "para compararlo contra el DBF oficial.\n\n"
+        "**Invalidación de la comparación:**\n"
+        "Cada ejecución exitosa del cálculo genera nuevamente los premios "
+        "calculados por el sistema. Por este motivo, cualquier comparación "
+        "realizada anteriormente deja de considerarse válida.\n\n"
+        "Después de una ejecución exitosa:\n"
+        "- `calculo_ejecutado = true`\n"
+        "- `comparacion_ejecutada = false`\n"
+        "- `fecha_comparacion = null`\n\n"
+        "El resultado generado por el sistema debe compararse nuevamente "
+        "contra el DBF oficial antes de poder cerrar el evento.\n\n"
         "**Turnos válidos:** PV, PR, M, V y N.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
     "responses": {
         200: {
-            "description": "✅ Cálculo ejecutado correctamente.",
+            "description": (
+                "✅ Cálculo ejecutado correctamente. "
+                "La comparación anterior queda invalidada."
+            ),
             "content": {
                 "application/json": {
                     "example": {
@@ -172,6 +183,8 @@ RESUMEN_CALCULO_DOCS = {
         "comisión, utilidad y cantidades calculadas por extracto.\n\n"
         "La consulta permanece disponible aunque el evento de "
         "auditoría se encuentre cerrado.\n\n"
+        "Este endpoint es únicamente de consulta y no modifica "
+        "el estado del evento, el cálculo ni la comparación.\n\n"
         "**Roles permitidos:** ADMIN, OPERADOR y CONSULTA."
     ),
     "responses": {

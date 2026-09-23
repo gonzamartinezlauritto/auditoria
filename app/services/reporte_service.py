@@ -55,6 +55,15 @@ def obtener_control_aciertos(
             )
         )
 
+        maquinas_procesadas = (
+            reporte_repository
+            .contar_maquinas_procesadas(
+                conn=conn,
+                fecha=fecha,
+                turno=turno_normalizado,
+            )
+        )
+
     reportes = []
 
     total_recaudacion = Decimal("0.00")
@@ -182,6 +191,9 @@ def obtener_control_aciertos(
             ),
             "importe_frontend": _decimal_a_float(
                 importe_total_frontend
+            ),
+            "maquinas_procesadas": int(
+                maquinas_procesadas or 0
             ),
             "diferencia_importe": _decimal_a_float(
                 diferencia_importe

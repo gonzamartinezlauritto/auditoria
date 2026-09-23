@@ -15,12 +15,30 @@ PROCESS_DBF_DOCS = {
         "Si el evento correspondiente a la fecha y turno se encuentra "
         "cerrado, no se permite cargar ni reemplazar el DBF. "
         "El evento debe ser reabierto previamente por un usuario ADMIN.\n\n"
+        "**Invalidación de la comparación:**\n"
+        "Al procesar o reprocesar correctamente un DBF, los aciertos "
+        "oficiales utilizados para la comparación pueden haber cambiado. "
+        "Por este motivo, cualquier comparación realizada anteriormente "
+        "deja de considerarse válida.\n\n"
+        "Después de una carga exitosa:\n"
+        "- `dbf_cargado = true`\n"
+        "- `calculo_ejecutado` conserva su estado actual\n"
+        "- `comparacion_ejecutada = false`\n"
+        "- `fecha_comparacion = null`\n\n"
+        "El cálculo propio del sistema no se invalida porque la carga "
+        "del DBF no modifica las apuestas, los extractos ni los premios "
+        "calculados por el sistema.\n\n"
+        "Antes de cerrar el evento será necesario ejecutar nuevamente "
+        "la comparación.\n\n"
         "**Turnos válidos:** PV, PR, M, V y N.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
     "responses": {
         200: {
-            "description": "✅ Archivo DBF procesado correctamente.",
+            "description": (
+                "✅ Archivo DBF procesado correctamente. "
+                "La comparación anterior queda invalidada."
+            ),
             "content": {
                 "application/json": {
                     "example": {
@@ -129,13 +147,31 @@ PROCESS_DBF_ZIP_DOCS = {
         "Si el evento correspondiente a la fecha y turno se encuentra "
         "cerrado, no se permite cargar ni reemplazar el DBF. "
         "El evento debe ser reabierto previamente por un usuario ADMIN.\n\n"
+        "**Invalidación de la comparación:**\n"
+        "El procesamiento exitoso del DBF extraído del ZIP tiene el "
+        "mismo efecto que el procesamiento directo de un archivo DBF. "
+        "Cualquier comparación realizada anteriormente deja de "
+        "considerarse válida.\n\n"
+        "Después de una carga exitosa:\n"
+        "- `dbf_cargado = true`\n"
+        "- `calculo_ejecutado` conserva su estado actual\n"
+        "- `comparacion_ejecutada = false`\n"
+        "- `fecha_comparacion = null`\n\n"
+        "El cálculo propio del sistema no se invalida porque la carga "
+        "del DBF no modifica las apuestas, los extractos ni los premios "
+        "calculados por el sistema.\n\n"
+        "Antes de cerrar el evento será necesario ejecutar nuevamente "
+        "la comparación.\n\n"
         "**Archivo permitido:** `.zip`\n\n"
         "**Turnos válidos:** PV, PR, M, V y N.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
     "responses": {
         200: {
-            "description": "✅ ZIP con DBF procesado correctamente.",
+            "description": (
+                "✅ ZIP con DBF procesado correctamente. "
+                "La comparación anterior queda invalidada."
+            ),
             "content": {
                 "application/json": {
                     "example": {

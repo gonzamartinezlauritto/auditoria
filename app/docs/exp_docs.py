@@ -34,6 +34,8 @@ UPLOAD_EXP_DOCS = {
         "Este endpoint únicamente almacena el archivo y no modifica "
         "el estado ni los datos del evento de auditoría. Por este motivo, "
         "la existencia de un evento cerrado no impide utilizar esta operación.\n\n"
+        "**Importante:** subir físicamente el archivo no invalida el cálculo "
+        "ni la comparación. La invalidación ocurre cuando el EXP es procesado.\n\n"
         "**Archivo permitido:** `.exp`\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
@@ -107,12 +109,27 @@ PROCESS_EXP_DOCS = {
         "cerrado, el procesamiento es rechazado. Para volver a procesar "
         "información del evento, un usuario ADMIN debe reabrirlo previamente "
         "indicando el motivo de la reapertura.\n\n"
+        "**Invalidación de estados:**\n"
+        "Al procesar o reprocesar correctamente un EXP, las apuestas del "
+        "evento pueden haber cambiado. Por este motivo, cualquier cálculo "
+        "y comparación realizados anteriormente dejan de considerarse válidos.\n\n"
+        "Después de una carga exitosa:\n"
+        "- `exp_cargado = true`\n"
+        "- `calculo_ejecutado = false`\n"
+        "- `comparacion_ejecutada = false`\n"
+        "- `fecha_calculo = null`\n"
+        "- `fecha_comparacion = null`\n\n"
+        "Antes de cerrar el evento será necesario volver a ejecutar el cálculo "
+        "y posteriormente la comparación.\n\n"
         "**Turnos válidos:** PV, PR, M, V y N.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
     "responses": {
         200: {
-            "description": "✅ Archivo EXP procesado correctamente.",
+            "description": (
+                "✅ Archivo EXP procesado correctamente. "
+                "El cálculo y la comparación anteriores quedan invalidados."
+            ),
             "content": {
                 "application/json": {
                     "example": {
@@ -217,13 +234,28 @@ PROCESS_EXP_ZIP_DOCS = {
         "cerrado, el EXP extraído no puede ser procesado. Para volver a "
         "procesar información del evento, un usuario ADMIN debe reabrirlo "
         "previamente indicando el motivo de la reapertura.\n\n"
+        "**Invalidación de estados:**\n"
+        "El procesamiento exitoso del EXP extraído del ZIP tiene exactamente "
+        "el mismo efecto que el procesamiento directo de un archivo EXP. "
+        "El cálculo y la comparación anteriores quedan invalidados.\n\n"
+        "Después de una carga exitosa:\n"
+        "- `exp_cargado = true`\n"
+        "- `calculo_ejecutado = false`\n"
+        "- `comparacion_ejecutada = false`\n"
+        "- `fecha_calculo = null`\n"
+        "- `fecha_comparacion = null`\n\n"
+        "Antes de cerrar el evento será necesario volver a ejecutar el cálculo "
+        "y posteriormente la comparación.\n\n"
         "**Archivo permitido:** `.zip`\n\n"
         "**Turnos válidos:** PV, PR, M, V y N.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
     "responses": {
         200: {
-            "description": "✅ ZIP procesado correctamente.",
+            "description": (
+                "✅ ZIP procesado correctamente. "
+                "El cálculo y la comparación anteriores quedan invalidados."
+            ),
             "content": {
                 "application/json": {
                     "example": {

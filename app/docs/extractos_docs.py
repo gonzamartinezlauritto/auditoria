@@ -12,11 +12,26 @@ CARGAR_EXTRACTOS_DOCS = {
         "Si el evento correspondiente a la fecha y turno se encuentra "
         "cerrado, no se permite cargar nuevamente sus extractos. "
         "El evento debe ser reabierto previamente por un usuario ADMIN.\n\n"
+        "**Invalidación de estados:**\n"
+        "Una carga exitosa reemplaza los resultados oficiales del evento. "
+        "Por este motivo, cualquier cálculo y comparación realizados "
+        "anteriormente dejan de considerarse válidos.\n\n"
+        "Después de una carga exitosa:\n"
+        "- `resultados_cargados = true`\n"
+        "- `calculo_ejecutado = false`\n"
+        "- `comparacion_ejecutada = false`\n"
+        "- `fecha_calculo = null`\n"
+        "- `fecha_comparacion = null`\n\n"
+        "Antes de cerrar el evento será necesario volver a ejecutar "
+        "el cálculo y posteriormente la comparación.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
     "responses": {
         200: {
-            "description": "✅ Extractos cargados correctamente.",
+            "description": (
+                "✅ Extractos cargados correctamente. "
+                "El cálculo y la comparación anteriores quedan invalidados."
+            ),
             "content": {
                 "application/json": {
                     "example": {
@@ -228,6 +243,8 @@ CONSULTAR_EXTRACTOS_DOCS = {
         "para una fecha determinada.\n\n"
         "La consulta permanece disponible aunque el evento "
         "de auditoría se encuentre cerrado.\n\n"
+        "Este endpoint es únicamente de consulta y no modifica "
+        "el estado del evento, el cálculo ni la comparación.\n\n"
         "**Roles permitidos:** ADMIN, OPERADOR y CONSULTA."
     ),
     "responses": {
@@ -281,22 +298,40 @@ MODIFICAR_EXTRACTOS_DOCS = {
         "Permite corregir uno o varios extractos ya cargados. "
         "Cada extracto debe enviarse nuevamente con sus 20 "
         "resultados completos.\n\n"
-        "El sistema detecta cuáles fueron modificados, "
-        "reemplaza sus resultados, elimina sus aciertos "
-        "calculados anteriormente y recalcula únicamente "
-        "los extractos afectados. Finalmente devuelve el "
-        "reporte completo actualizado del turno.\n\n"
+        "El sistema compara los resultados recibidos con los "
+        "resultados actualmente almacenados y detecta cuáles "
+        "fueron realmente modificados.\n\n"
+        "Cuando existe un cambio, reemplaza los resultados del "
+        "extracto afectado, elimina sus aciertos calculados "
+        "anteriormente y recalcula únicamente ese extracto. "
+        "Finalmente devuelve el reporte completo actualizado "
+        "del turno.\n\n"
         "**Protección del evento:**\n"
         "Si el evento correspondiente a la fecha y turno se encuentra "
         "cerrado, no se permite modificar sus extractos. "
         "El evento debe ser reabierto previamente por un usuario ADMIN.\n\n"
+        "**Invalidación de la comparación:**\n"
+        "Si al menos un extracto fue realmente modificado, el cálculo "
+        "queda actualizado automáticamente, pero cualquier comparación "
+        "realizada anteriormente deja de ser válida.\n\n"
+        "Después de una modificación real:\n"
+        "- `calculo_ejecutado = true`\n"
+        "- `comparacion_ejecutada = false`\n"
+        "- `fecha_comparacion = null`\n\n"
+        "Por lo tanto, antes de cerrar el evento será necesario volver "
+        "a ejecutar la comparación.\n\n"
+        "**Sin cambios:**\n"
+        "Si los resultados enviados son exactamente iguales a los que "
+        "ya se encuentran almacenados, no se recalculan extractos y "
+        "la comparación existente no se invalida.\n\n"
         "**Roles permitidos:** ADMIN y OPERADOR."
     ),
     "responses": {
         200: {
             "description": (
-                "✅ Extractos modificados y cálculo actualizado "
-                "correctamente."
+                "✅ Solicitud procesada correctamente. Si existieron "
+                "cambios reales, los extractos afectados fueron recalculados "
+                "y la comparación anterior quedó invalidada."
             ),
         },
         400: {

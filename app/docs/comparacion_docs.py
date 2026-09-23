@@ -59,6 +59,25 @@ RUN_COMPARACION_DOCS = {
         "Esta etapa es obligatoria para poder realizar posteriormente "
         "el cierre del evento de auditoría.\n\n"
 
+        "**Validez de la comparación:**\n"
+        "La comparación representa el estado del cálculo y del DBF en el "
+        "momento en que fue ejecutada. Si posteriormente se modifica "
+        "información que interviene en la auditoría, la comparación deja "
+        "de ser válida y debe ejecutarse nuevamente.\n\n"
+
+        "La comparación se invalida cuando:\n"
+        "- Se procesa o reprocesa el EXP.\n"
+        "- Se cargan nuevamente los extractos.\n"
+        "- Se modifica al menos un extracto y se recalculan sus premios.\n"
+        "- Se ejecuta nuevamente el cálculo de premios.\n"
+        "- Se carga o reemplaza el DBF.\n"
+        "- Se reabre un evento previamente cerrado.\n\n"
+
+        "Cuando esto ocurre, el sistema establece "
+        "`comparacion_ejecutada = false` y `fecha_comparacion = null`. "
+        "Por lo tanto, será obligatorio ejecutar nuevamente esta operación "
+        "antes de cerrar el evento.\n\n"
+
         "Una comparación puede considerarse ejecutada aunque existan "
         "diferencias entre el sistema y el DBF. El cierre del evento "
         "requiere que la comparación haya sido realizada, pero no exige "

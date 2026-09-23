@@ -180,3 +180,45 @@ def obtener_importe_total_frontend(
         resultado = cur.fetchone()
 
         return resultado[0] if resultado else 0
+
+
+def contar_maquinas_procesadas(
+    conn: connection,
+    fecha: int,
+    turno: str,
+) -> int:
+    """
+    Obtiene la cantidad de máquinas procesadas
+    para una fecha y turno de sorteo.
+
+    Una máquina se identifica por la combinación:
+    agencia + subagencia + número de máquina.
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(
+                DISTINCT (
+                    n_agent,
+                    n_subag,
+                    n_maqui
+                )
+            )
+            FROM quiniela_exp
+            WHERE n_fsorteo = %s
+              AND TRIM(c_tsorteo) = %s
+              AND COALESCE(c_ecupon, '') = 'N'
+              AND COALESCE(n_nodef, 0) <> 1
+              AND n_maqui IS NOT NULL
+            """,
+            (
+                fecha,
+                turno,
+            ),
+        )
+
+        resultado = cur.fetchone()
+
+        return resultado[0] if resultado else 0
+    
