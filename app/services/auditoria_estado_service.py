@@ -76,11 +76,13 @@ def marcar_comparacion_ejecutada(
     conn: connection,
     fecha: int,
     turno: str,
+    hay_diferencias: bool,
 ) -> None:
     auditoria_repository.marcar_comparacion_ejecutada(
         conn=conn,
         fecha=fecha,
         turno=turno,
+        hay_diferencias=hay_diferencias,
     )
 
 
@@ -134,8 +136,20 @@ def validar_evento_abierto(
     if not evento:
         return
 
+    # Estructura actual de obtener_evento():
+    #
+    # 0  fecha_sorteo
+    # 1  turno
+    # 2  exp_cargado
+    # 3  resultados_cargados
+    # 4  dbf_cargado
+    # 5  calculo_ejecutado
+    # 6  comparacion_ejecutada
+    # 7  hay_diferencias
+    # 8  evento_cerrado
+
     evento_cerrado = bool(
-        evento[7]
+        evento[8]
     )
 
     if evento_cerrado:
@@ -184,6 +198,7 @@ def cerrar_evento(
                 dbf_cargado,
                 calculo_ejecutado,
                 comparacion_ejecutada,
+                _hay_diferencias,
                 evento_cerrado,
                 _fecha_comparacion,
                 _fecha_cierre,
@@ -320,8 +335,10 @@ def reabrir_evento(
                     )
                 )
 
+            # Ahora evento_cerrado se encuentra
+            # en la posición 8.
             evento_cerrado = bool(
-                evento[7]
+                evento[8]
             )
 
             if not evento_cerrado:
@@ -418,6 +435,7 @@ def obtener_estado_por_fecha(
                 fecha_calculo,
                 comparacion_ejecutada,
                 fecha_comparacion,
+                hay_diferencias,
                 evento_cerrado,
                 fecha_cierre,
                 cerrado_por,
@@ -449,6 +467,14 @@ def obtener_estado_por_fecha(
 
                     "comparacion_ejecutada": bool(
                         comparacion_ejecutada
+                    ),
+
+                    # NULL significa que no existe una
+                    # comparación vigente.
+                    "hay_diferencias": (
+                        bool(hay_diferencias)
+                        if hay_diferencias is not None
+                        else None
                     ),
 
                     "evento_cerrado": bool(
@@ -565,13 +591,19 @@ def obtener_historial_evento(
                     "id": int(
                         historial_id
                     ),
+
                     "fecha": int(
                         fecha_sorteo
                     ),
+
                     "turno": turno_evento,
+
                     "accion": accion,
+
                     "usuario": usuario,
+
                     "motivo": motivo,
+
                     "fecha_operacion": (
                         str(created_at)
                         if created_at

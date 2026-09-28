@@ -23,6 +23,7 @@ def marcar_exp_cargado(
                 updated_at
             )
             VALUES (%s, %s, TRUE, %s, NOW(), NOW())
+
             ON CONFLICT (fecha_sorteo, turno)
             DO UPDATE SET
                 exp_cargado = TRUE,
@@ -60,6 +61,7 @@ def marcar_dbf_cargado(
                 updated_at
             )
             VALUES (%s, %s, TRUE, %s, NOW(), NOW())
+
             ON CONFLICT (fecha_sorteo, turno)
             DO UPDATE SET
                 dbf_cargado = TRUE,
@@ -94,6 +96,7 @@ def marcar_resultados_cargados(
                 updated_at
             )
             VALUES (%s, %s, TRUE, NOW())
+
             ON CONFLICT (fecha_sorteo, turno)
             DO UPDATE SET
                 resultados_cargados = TRUE,
@@ -126,6 +129,7 @@ def marcar_calculo_ejecutado(
                 updated_at
             )
             VALUES (%s, %s, TRUE, NOW(), NOW())
+
             ON CONFLICT (fecha_sorteo, turno)
             DO UPDATE SET
                 calculo_ejecutado = TRUE,
@@ -147,7 +151,17 @@ def marcar_comparacion_ejecutada(
     conn: connection,
     fecha: int,
     turno: str,
+    hay_diferencias: bool,
 ) -> None:
+    """
+    Marca la comparación Sistema/DBF como ejecutada y guarda
+    el resultado general de la comparación.
+
+    hay_diferencias:
+        False -> comparación ejecutada sin diferencias relevantes.
+        True  -> comparación ejecutada con diferencias relevantes.
+    """
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -155,11 +169,13 @@ def marcar_comparacion_ejecutada(
             SET
                 comparacion_ejecutada = TRUE,
                 fecha_comparacion = NOW(),
+                hay_diferencias = %s,
                 updated_at = NOW()
             WHERE fecha_sorteo = %s
               AND turno = %s
             """,
             (
+                hay_diferencias,
                 fecha,
                 turno,
             ),
@@ -175,6 +191,13 @@ def invalidar_comparacion(
     fecha: int,
     turno: str,
 ) -> None:
+    """
+    Invalida la comparación anterior.
+
+    Al dejar de existir una comparación vigente,
+    hay_diferencias vuelve a NULL.
+    """
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -182,6 +205,7 @@ def invalidar_comparacion(
             SET
                 comparacion_ejecutada = FALSE,
                 fecha_comparacion = NULL,
+                hay_diferencias = NULL,
                 updated_at = NOW()
             WHERE fecha_sorteo = %s
               AND turno = %s
@@ -202,6 +226,13 @@ def invalidar_calculo_y_comparacion(
     fecha: int,
     turno: str,
 ) -> None:
+    """
+    Invalida tanto el cálculo como la comparación.
+
+    Si el cálculo deja de ser válido, cualquier comparación
+    realizada sobre ese cálculo también deja de ser válida.
+    """
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -211,6 +242,7 @@ def invalidar_calculo_y_comparacion(
                 fecha_calculo = NULL,
                 comparacion_ejecutada = FALSE,
                 fecha_comparacion = NULL,
+                hay_diferencias = NULL,
                 updated_at = NOW()
             WHERE fecha_sorteo = %s
               AND turno = %s
@@ -251,6 +283,7 @@ def obtener_estado_por_fecha(
 
                 comparacion_ejecutada,
                 fecha_comparacion,
+                hay_diferencias,
 
                 evento_cerrado,
                 fecha_cierre,
@@ -306,6 +339,7 @@ def obtener_evento(
                 calculo_ejecutado,
 
                 comparacion_ejecutada,
+                hay_diferencias,
                 evento_cerrado,
 
                 fecha_comparacion,
@@ -372,6 +406,18 @@ def reabrir_evento(
     usuario: str,
     motivo: str,
 ) -> None:
+    """
+    Reabre un evento cerrado.
+
+    La comparación anterior deja de considerarse vigente,
+    por lo que:
+        comparacion_ejecutada = FALSE
+        fecha_comparacion = NULL
+        hay_diferencias = NULL
+
+    El cálculo realizado se conserva.
+    """
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -385,6 +431,7 @@ def reabrir_evento(
 
                 comparacion_ejecutada = FALSE,
                 fecha_comparacion = NULL,
+                hay_diferencias = NULL,
 
                 updated_at = NOW()
 

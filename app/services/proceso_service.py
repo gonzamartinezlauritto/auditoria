@@ -70,6 +70,23 @@ def _int(valor) -> int:
     return int(valor)
 
 
+def _bool_nullable(valor):
+    """
+    Convierte un valor a bool preservando None.
+
+    Se utiliza principalmente para hay_diferencias:
+
+        None  -> no existe comparación vigente
+        False -> comparación sin diferencias
+        True  -> comparación con diferencias
+    """
+
+    if valor is None:
+        return None
+
+    return bool(valor)
+
+
 # =========================================================
 # SERVICIO PRINCIPAL
 # =========================================================
@@ -86,6 +103,7 @@ def obtener_estado_proceso(
     - resumen por evento/turno
     - filas por extracto
     - estados del proceso
+    - resultado del control de aciertos
     - recaudación
     - cupones jugados
     - importes calculados por Auditoría
@@ -188,12 +206,16 @@ def obtener_estado_proceso(
     }
 
     cupones_auditoria_turno_map = {
-        item["turno"]: _int(item["cupones"])
+        item["turno"]: _int(
+            item["cupones"]
+        )
         for item in cupones_unicos_auditoria
     }
 
     cupones_dbf_turno_map = {
-        item["turno"]: _int(item["cupones"])
+        item["turno"]: _int(
+            item["cupones"]
+        )
         for item in cupones_unicos_dbf
     }
 
@@ -251,11 +273,14 @@ def obtener_estado_proceso(
 
         fila = {
             "turno": turno,
+
             "evento": NOMBRES_EVENTOS.get(
                 turno,
                 turno,
             ),
+
             "codigo_extracto": codigo_extracto,
+
             "extracto": extracto,
 
             # ---------------------------------------------
@@ -294,6 +319,23 @@ def obtener_estado_proceso(
                 estado.get(
                     "comparacion_ejecutada",
                     False,
+                )
+            ),
+
+            # El resultado del Control de Aciertos
+            # pertenece al evento/turno.
+            #
+            # None:
+            #   todavía no existe comparación vigente.
+            #
+            # False:
+            #   comparación ejecutada sin diferencias.
+            #
+            # True:
+            #   comparación ejecutada con diferencias.
+            "hay_diferencias": _bool_nullable(
+                estado.get(
+                    "hay_diferencias"
                 )
             ),
 
@@ -344,7 +386,9 @@ def obtener_estado_proceso(
             ),
         }
 
-        filas.append(fila)
+        filas.append(
+            fila
+        )
 
     # =====================================================
     # ORDENAR FILAS
@@ -372,7 +416,9 @@ def obtener_estado_proceso(
         turno = fila["turno"]
 
         if turno not in turnos_presentes:
-            turnos_presentes.append(turno)
+            turnos_presentes.append(
+                turno
+            )
 
     turnos_presentes.sort(
         key=lambda turno: ORDEN_TURNOS.get(
@@ -409,6 +455,12 @@ def obtener_estado_proceso(
             Decimal("0"),
         )
 
+        # El estado pertenece al turno completo.
+        estado_turno = estados_map.get(
+            turno,
+            {},
+        )
+
         resumen_eventos.append(
             {
                 "turno": turno,
@@ -417,6 +469,34 @@ def obtener_estado_proceso(
                     turno,
                     turno,
                 ),
+
+                # -----------------------------------------
+                # ESTADO DEL CONTROL
+                # -----------------------------------------
+
+                "comparacion_ejecutada": bool(
+                    estado_turno.get(
+                        "comparacion_ejecutada",
+                        False,
+                    )
+                ),
+
+                "hay_diferencias": _bool_nullable(
+                    estado_turno.get(
+                        "hay_diferencias"
+                    )
+                ),
+
+                "evento_cerrado": bool(
+                    estado_turno.get(
+                        "evento_cerrado",
+                        False,
+                    )
+                ),
+
+                # -----------------------------------------
+                # TOTALES DEL EVENTO
+                # -----------------------------------------
 
                 "importe_recaudacion": float(
                     importe_recaudacion
@@ -497,6 +577,7 @@ def obtener_estado_proceso(
 
     return {
         "ok": True,
+
         "fecha": fecha,
 
         "resumen_eventos": resumen_eventos,

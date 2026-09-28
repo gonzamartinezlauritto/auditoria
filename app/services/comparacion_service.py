@@ -462,6 +462,34 @@ def comparar_sistema_con_dbf(
             )
 
             # ========================================================
+            # RESULTADO GENERAL DE LA COMPARACIÓN
+            # ========================================================
+
+            # Hay diferencias de auditoría cuando:
+            #
+            # 1. Existe al menos un ganador calculado por Auditoría
+            #    que no aparece en el DBF.
+            #
+            # 2. Existe al menos un ganador del DBF que no aparece
+            #    en Auditoría.
+            #
+            # 3. Existe al menos un cupón cuyo monto tiene una
+            #    diferencia superior a la tolerancia de $100.
+            #
+            # Las diferencias monetarias <= $100 NO hacen que
+            # hay_diferencias sea True.
+
+            hay_diferencias = (
+                len(solo_sistema) > 0
+                or len(solo_dbf) > 0
+                or len(
+                    comparacion_montos[
+                        "diferencias"
+                    ]
+                ) > 0
+            )
+
+            # ========================================================
             # ACTUALIZAR RESUMEN
             # ========================================================
 
@@ -480,6 +508,7 @@ def comparar_sistema_con_dbf(
                 conn=conn,
                 fecha=fecha,
                 turno=turno_normalizado,
+                hay_diferencias=hay_diferencias,
             )
 
         # ============================================================
@@ -496,7 +525,8 @@ def comparar_sistema_con_dbf(
             "monto_sistema=%s "
             "monto_dbf=%s "
             "diferencias_monto=%s "
-            "toleradas=%s",
+            "toleradas=%s "
+            "hay_diferencias=%s",
             fecha,
             turno_normalizado,
             total_aciertos_sistema,
@@ -517,6 +547,7 @@ def comparar_sistema_con_dbf(
             comparacion_montos[
                 "toleradas"
             ],
+            hay_diferencias,
         )
 
         # ============================================================
@@ -527,6 +558,10 @@ def comparar_sistema_con_dbf(
             "ok": True,
             "fecha": fecha,
             "turno": turno_normalizado,
+
+            # Resultado resumido para poder mostrar directamente
+            # el estado del Control de Aciertos.
+            "hay_diferencias": hay_diferencias,
 
             "aciertos": {
                 "sistema": total_aciertos_sistema,

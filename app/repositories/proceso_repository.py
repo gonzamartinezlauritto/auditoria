@@ -94,6 +94,11 @@ def obtener_estados_jornada(
     Un turno puede tener apuestas en quiniela_exp y todavía
     no existir en auditoria_cargas. En ese caso el service
     completará sus estados como False.
+
+    hay_diferencias:
+        NULL  -> no existe una comparación vigente.
+        FALSE -> comparación ejecutada sin diferencias relevantes.
+        TRUE  -> comparación ejecutada con diferencias relevantes.
     """
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -107,6 +112,7 @@ def obtener_estados_jornada(
                 calculo_ejecutado,
                 dbf_cargado,
                 comparacion_ejecutada,
+                hay_diferencias,
                 evento_cerrado,
 
                 fecha_exp,
@@ -465,6 +471,7 @@ def obtener_importes_dbf_por_turno(
 
         return cur.fetchall()
 
+
 # =========================================================
 # CUPONES JUGADOS ÚNICOS POR TURNO
 # =========================================================
@@ -554,6 +561,7 @@ def obtener_cupones_jugados_unicos_jornada(
                     n_cupon
                 )
             )
+
             FROM quiniela_exp
 
             WHERE n_fsorteo = %s
@@ -567,3 +575,4 @@ def obtener_cupones_jugados_unicos_jornada(
         resultado = cur.fetchone()
 
         return resultado[0] if resultado else 0
+    
