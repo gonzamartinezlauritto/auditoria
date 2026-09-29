@@ -3,8 +3,6 @@ from decimal import Decimal
 from app.database import get_connection
 from app.repositories.proceso_repository import (
     obtener_apuestas_jornada,
-    obtener_cupones_jugados_unicos_jornada,
-    obtener_cupones_jugados_unicos_por_turno,
     obtener_cupones_premiados_dbf,
     obtener_cupones_unicos_auditoria_por_turno,
     obtener_cupones_unicos_dbf_por_turno,
@@ -119,6 +117,15 @@ def obtener_estado_proceso(
         # DATOS BASE DE LA JORNADA
         # -------------------------------------------------
 
+        # Esta consulta ya devuelve:
+        #
+        # - recaudación por turno + extracto
+        # - cupones jugados por turno + extracto
+        # - cupones jugados únicos por turno
+        # - cupones jugados únicos de toda la jornada
+        #
+        # De esta manera evitamos volver a consultar
+        # quiniela_exp para obtener los cupones únicos.
         apuestas_jornada = obtener_apuestas_jornada(
             conn,
             fecha,
@@ -160,24 +167,6 @@ def obtener_estado_proceso(
         importes_dbf = obtener_importes_dbf_por_turno(
             conn,
             fecha,
-        )
-
-        # -------------------------------------------------
-        # CUPONES JUGADOS ÚNICOS
-        # -------------------------------------------------
-
-        cupones_jugados_por_turno = (
-            obtener_cupones_jugados_unicos_por_turno(
-                conn,
-                fecha,
-            )
-        )
-
-        cupones_jugados_jornada = (
-            obtener_cupones_jugados_unicos_jornada(
-                conn,
-                fecha,
-            )
         )
 
     # =====================================================
@@ -226,12 +215,47 @@ def obtener_estado_proceso(
         for item in importes_dbf
     }
 
+    # -----------------------------------------------------
+    # CUPONES JUGADOS ÚNICOS POR TURNO
+    # -----------------------------------------------------
+    #
+    # Estos datos ya vienen incluidos en apuestas_jornada.
+    #
+    # Cada extracto del mismo turno contiene el mismo valor
+    # de cupones_jugados_turno, por lo que construir el
+    # diccionario de esta forma es seguro.
+
     cupones_jugados_turno_map = {
         item["turno"]: _int(
-            item["cupones_jugados"]
+            item.get(
+                "cupones_jugados_turno",
+                0,
+            )
         )
-        for item in cupones_jugados_por_turno
+        for item in apuestas_jornada
     }
+
+    # -----------------------------------------------------
+    # CUPONES JUGADOS ÚNICOS DE TODA LA JORNADA
+    # -----------------------------------------------------
+    #
+    # El mismo total viene repetido en todas las filas
+    # devueltas por obtener_apuestas_jornada().
+    #
+    # Tomamos el valor de la primera fila.
+    #
+    # Si no existen apuestas para la fecha, devolvemos 0.
+
+    cupones_jugados_jornada = (
+        _int(
+            apuestas_jornada[0].get(
+                "cupones_jugados_jornada",
+                0,
+            )
+        )
+        if apuestas_jornada
+        else 0
+    )
 
     # =====================================================
     # CONSTRUCCIÓN DE FILAS
@@ -503,8 +527,9 @@ def obtener_estado_proceso(
                 ),
 
                 # IMPORTANTE:
-                # Ya no sumamos los cupones de los 7 extractos.
-                # Se cuentan los cupones únicos del turno.
+                # No se suman los cupones de los extractos.
+                # Se utilizan los cupones únicos del turno
+                # calculados en la consulta optimizada.
                 "total_cupones_jugados": (
                     cupones_jugados_turno_map.get(
                         turno,

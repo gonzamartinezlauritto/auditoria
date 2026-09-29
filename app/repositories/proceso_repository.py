@@ -11,15 +11,25 @@ def obtener_apuestas_jornada(
     fecha: int,
 ) -> list[dict]:
     """
-    Obtiene todos los extractos presentes en quiniela_exp
-    para una fecha determinada.
+    Obtiene toda la información de apuestas necesaria para
+    representar la jornada completa.
 
     Devuelve por turno + extracto:
     - turno
     - código de extracto
     - nombre del extracto
     - recaudación
-    - cupones jugados
+    - cupones jugados del extracto
+    - cupones jugados únicos del turno
+    - cupones jugados únicos de toda la jornada
+
+    La consulta procesa quiniela_exp una sola vez.
+
+    Primero reduce las apuestas a una fila por:
+        turno + extracto + agencia + subagencia + máquina + cupón
+
+    A partir de esa base reducida calcula los distintos niveles
+    de agregación necesarios para la pantalla.
 
     Los importes de quiniela_exp están almacenados x100,
     por lo que la recaudación se divide por 100.
@@ -28,42 +38,104 @@ def obtener_apuestas_jornada(
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
+            WITH base AS MATERIALIZED (
+                SELECT
+                    TRIM(c_tsorteo) AS turno,
+                    n_codext AS codigo_extracto,
+                    n_agent,
+                    n_subag,
+                    n_maqui,
+                    n_cupon,
+                    SUM(n_impapos) AS importe
+
+                FROM quiniela_exp
+
+                WHERE n_fsorteo = %s
+                  AND COALESCE(c_ecupon, '') = 'N'
+                  AND COALESCE(n_nodef, 0) <> 1
+                  AND n_impapos > 0
+
+                GROUP BY
+                    TRIM(c_tsorteo),
+                    n_codext,
+                    n_agent,
+                    n_subag,
+                    n_maqui,
+                    n_cupon
+            ),
+
+            por_extracto AS (
+                SELECT
+                    turno,
+                    codigo_extracto,
+
+                    SUM(importe) / 100.0 AS recaudacion,
+
+                    COUNT(*) AS cupones_jugados
+
+                FROM base
+
+                GROUP BY
+                    turno,
+                    codigo_extracto
+            ),
+
+            cupones_turno AS (
+                SELECT
+                    turno,
+                    COUNT(*) AS cupones_jugados_turno
+
+                FROM (
+                    SELECT DISTINCT
+                        turno,
+                        n_agent,
+                        n_subag,
+                        n_maqui,
+                        n_cupon
+
+                    FROM base
+                ) AS t
+
+                GROUP BY turno
+            ),
+
+            cupones_jornada AS (
+                SELECT
+                    COUNT(*) AS cupones_jugados_jornada
+
+                FROM (
+                    SELECT DISTINCT
+                        turno,
+                        n_agent,
+                        n_subag,
+                        n_maqui,
+                        n_cupon
+
+                    FROM base
+                ) AS j
+            )
+
             SELECT
-                TRIM(q.c_tsorteo) AS turno,
-                q.n_codext AS codigo_extracto,
+                pe.turno,
+                pe.codigo_extracto,
                 e.nombre_extracto AS extracto,
+                pe.recaudacion,
+                pe.cupones_jugados,
+                ct.cupones_jugados_turno,
+                cj.cupones_jugados_jornada
 
-                COALESCE(
-                    SUM(q.n_impapos),
-                    0
-                ) / 100.0 AS recaudacion,
-
-                COUNT(
-                    DISTINCT (
-                        q.n_agent,
-                        q.n_subag,
-                        q.n_maqui,
-                        q.n_cupon
-                    )
-                ) AS cupones_jugados
-
-            FROM quiniela_exp q
+            FROM por_extracto pe
 
             LEFT JOIN extractos e
-                ON e.codigo_extracto = q.n_codext
+                ON e.codigo_extracto = pe.codigo_extracto
 
-            WHERE q.n_fsorteo = %s
-              AND COALESCE(q.c_ecupon, '') = 'N'
-              AND COALESCE(q.n_nodef, 0) <> 1
-              AND q.n_impapos > 0
+            INNER JOIN cupones_turno ct
+                ON ct.turno = pe.turno
 
-            GROUP BY
-                TRIM(q.c_tsorteo),
-                q.n_codext,
-                e.nombre_extracto
+            CROSS JOIN cupones_jornada cj
 
             ORDER BY
-                CASE TRIM(q.c_tsorteo)
+                CASE pe.turno
                     WHEN 'PV' THEN 1
                     WHEN 'PR' THEN 2
                     WHEN 'M'  THEN 3
@@ -71,13 +143,12 @@ def obtener_apuestas_jornada(
                     WHEN 'N'  THEN 5
                     ELSE 99
                 END,
-                q.n_codext
+                pe.codigo_extracto
             """,
             (fecha,),
         )
 
         return cur.fetchall()
-
 
 # =========================================================
 # ESTADOS DE LOS EVENTOS
@@ -471,108 +542,3 @@ def obtener_importes_dbf_por_turno(
 
         return cur.fetchall()
 
-
-# =========================================================
-# CUPONES JUGADOS ÚNICOS POR TURNO
-# =========================================================
-
-def obtener_cupones_jugados_unicos_por_turno(
-    conn: connection,
-    fecha: int,
-) -> list[dict]:
-    """
-    Obtiene la cantidad real de cupones jugados por turno.
-
-    Un mismo cupón puede contener apuestas para varios extractos,
-    por lo que no se deben sumar los cupones de cada extracto.
-
-    La identidad del cupón es:
-        n_agent
-        n_subag
-        n_maqui
-        n_cupon
-    """
-
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            """
-            SELECT
-                TRIM(c_tsorteo) AS turno,
-
-                COUNT(
-                    DISTINCT (
-                        n_agent,
-                        n_subag,
-                        n_maqui,
-                        n_cupon
-                    )
-                ) AS cupones_jugados
-
-            FROM quiniela_exp
-
-            WHERE n_fsorteo = %s
-              AND COALESCE(c_ecupon, '') = 'N'
-              AND COALESCE(n_nodef, 0) <> 1
-              AND n_impapos > 0
-
-            GROUP BY TRIM(c_tsorteo)
-
-            ORDER BY
-                CASE TRIM(c_tsorteo)
-                    WHEN 'PV' THEN 1
-                    WHEN 'PR' THEN 2
-                    WHEN 'M'  THEN 3
-                    WHEN 'V'  THEN 4
-                    WHEN 'N'  THEN 5
-                    ELSE 99
-                END
-            """,
-            (fecha,),
-        )
-
-        return cur.fetchall()
-
-
-# =========================================================
-# CUPONES JUGADOS ÚNICOS DE TODA LA JORNADA
-# =========================================================
-
-def obtener_cupones_jugados_unicos_jornada(
-    conn: connection,
-    fecha: int,
-) -> int:
-    """
-    Obtiene los cupones jugados únicos de toda la jornada.
-
-    Se incluye el turno en la identidad para evitar considerar
-    como el mismo cupón dos cupones pertenecientes a sorteos
-    distintos del mismo día.
-    """
-
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT COUNT(
-                DISTINCT (
-                    TRIM(c_tsorteo),
-                    n_agent,
-                    n_subag,
-                    n_maqui,
-                    n_cupon
-                )
-            )
-
-            FROM quiniela_exp
-
-            WHERE n_fsorteo = %s
-              AND COALESCE(c_ecupon, '') = 'N'
-              AND COALESCE(n_nodef, 0) <> 1
-              AND n_impapos > 0
-            """,
-            (fecha,),
-        )
-
-        resultado = cur.fetchone()
-
-        return resultado[0] if resultado else 0
-    
