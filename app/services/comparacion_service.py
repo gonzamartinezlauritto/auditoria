@@ -1,3 +1,4 @@
+
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
@@ -25,9 +26,7 @@ CENTAVO = Decimal("0.01")
 TOLERANCIA_MONTO = Decimal("100.00")
 
 
-def _decimal_monto(
-    value,
-) -> Decimal:
+def _decimal_monto(value) -> Decimal:
     return Decimal(
         str(value or 0)
     ).quantize(
@@ -60,6 +59,7 @@ def _armar_comparacion_por_extracto(
     sistema: list[tuple],
     dbf: list[tuple],
 ) -> list[dict[str, int]]:
+
     sistema_dict = {
         int(codigo): int(cantidad)
         for codigo, cantidad in sistema
@@ -71,21 +71,14 @@ def _armar_comparacion_por_extracto(
     }
 
     codigos = sorted(
-        set(sistema_dict)
-        | set(dbf_dict)
+        set(sistema_dict) | set(dbf_dict)
     )
 
     return [
         {
             "codigo_extracto": codigo,
-            "sistema": sistema_dict.get(
-                codigo,
-                0,
-            ),
-            "dbf": dbf_dict.get(
-                codigo,
-                0,
-            ),
+            "sistema": sistema_dict.get(codigo, 0),
+            "dbf": dbf_dict.get(codigo, 0),
             "diferencia": (
                 sistema_dict.get(codigo, 0)
                 - dbf_dict.get(codigo, 0)
@@ -103,12 +96,10 @@ def _armar_comparacion_montos_cupones(
     Compara los montos a nivel CUPÓN GLOBAL.
 
     Clave:
-    (
         agencia,
         subagencia,
         maquina,
         cupon
-    )
 
     Una diferencia absoluta <= $100
     se considera tolerada.
@@ -147,8 +138,7 @@ def _armar_comparacion_montos_cupones(
     }
 
     claves = sorted(
-        set(sistema_dict)
-        | set(dbf_dict)
+        set(sistema_dict) | set(dbf_dict)
     )
 
     diferencias = []
@@ -166,6 +156,7 @@ def _armar_comparacion_montos_cupones(
     )
 
     for clave in claves:
+
         monto_sistema = sistema_dict.get(
             clave,
             Decimal("0.00"),
@@ -177,24 +168,20 @@ def _armar_comparacion_montos_cupones(
         )
 
         diferencia = (
-            monto_sistema
-            - monto_dbf
+            monto_sistema - monto_dbf
         ).quantize(
             CENTAVO,
             rounding=ROUND_HALF_UP,
         )
 
-        diferencia_absoluta = abs(
-            diferencia
-        )
+        diferencia_absoluta = abs(diferencia)
 
         # Coincidencia exacta
         if diferencia_absoluta == Decimal("0.00"):
             coincidentes_exactos += 1
             continue
 
-        # Diferencia tolerada:
-        # hasta $100 inclusive NO corre como diferencia.
+        # Diferencia tolerada hasta $100 inclusive
         if diferencia_absoluta <= TOLERANCIA_MONTO:
             toleradas += 1
             continue
@@ -212,22 +199,16 @@ def _armar_comparacion_montos_cupones(
                 "subagencia": subagencia,
                 "maquina": maquina,
                 "cupon": cupon,
-                "sistema": float(
-                    monto_sistema
-                ),
-                "dbf": float(
-                    monto_dbf
-                ),
-                "diferencia": float(
-                    diferencia
-                ),
+                "sistema": float(monto_sistema),
+                "dbf": float(monto_dbf),
+                "diferencia": float(diferencia),
                 "diferencia_absoluta": float(
                     diferencia_absoluta
                 ),
             }
         )
 
-    # Ordenamos primero las diferencias más grandes.
+    # Ordenar primero las diferencias más grandes
     diferencias.sort(
         key=lambda item: item[
             "diferencia_absoluta"
@@ -236,8 +217,7 @@ def _armar_comparacion_montos_cupones(
     )
 
     diferencia_total = (
-        monto_total_sistema
-        - monto_total_dbf
+        monto_total_sistema - monto_total_dbf
     ).quantize(
         CENTAVO,
         rounding=ROUND_HALF_UP,
@@ -267,15 +247,14 @@ def comparar_sistema_con_dbf(
     fecha: int,
     turno: str,
 ) -> dict[str, Any]:
-    turno_normalizado = (
-        turno.upper().strip()
-    )
+
+    turno_normalizado = turno.upper().strip()
 
     try:
         with transaction() as conn:
 
             # ========================================================
-            # PROTEGER EVENTOS CERRADOS
+            # VALIDAR QUE EL EVENTO ESTÉ ABIERTO
             # ========================================================
 
             validar_evento_abierto(
@@ -327,7 +306,7 @@ def comparar_sistema_con_dbf(
                 raise DbfNoCargadoError()
 
             # ========================================================
-            # GANADORES SISTEMA / DBF
+            # OBTENER GANADORES SISTEMA / DBF
             # ========================================================
 
             ganadores_sistema = (
@@ -357,18 +336,15 @@ def comparar_sistema_con_dbf(
             )
 
             coincidentes = (
-                set_sistema
-                & set_dbf
+                set_sistema & set_dbf
             )
 
             solo_sistema = (
-                set_sistema
-                - set_dbf
+                set_sistema - set_dbf
             )
 
             solo_dbf = (
-                set_dbf
-                - set_sistema
+                set_dbf - set_sistema
             )
 
             # ========================================================
@@ -399,6 +375,47 @@ def comparar_sistema_con_dbf(
                     dbf=por_extracto_dbf,
                 )
             )
+
+            # ========================================================
+            # NUEVO: EXTRACTOS CON DIFERENCIAS
+            # ========================================================
+            #
+            # Identifica extractos con:
+            #
+            # 1. Diferencias en cantidad de aciertos.
+            # 2. Ganadores presentes solo en Auditoría.
+            # 3. Ganadores presentes solo en el DBF.
+            #
+            # Elimina códigos repetidos y los ordena.
+            #
+            # Frontend utilizará este arreglo para marcar
+            # los extractos que requieren revisión.
+            # ========================================================
+
+            extractos_con_diferencias = sorted(
+                {
+                    item["codigo_extracto"]
+                    for item in por_extracto
+                    if item["diferencia"] != 0
+                }
+                | {
+                    int(item[0])
+                    for item in solo_sistema
+                }
+                | {
+                    int(item[0])
+                    for item in solo_dbf
+                }
+            )
+
+            # ========================================================
+            # TOTALES DE ACIERTOS
+            # ========================================================
+            #
+            # CORRECCIÓN:
+            # Estas variables faltaban en el archivo anterior
+            # y provocaban el NameError.
+            # ========================================================
 
             total_aciertos_sistema = sum(
                 item["sistema"]
@@ -464,28 +481,22 @@ def comparar_sistema_con_dbf(
             # ========================================================
             # RESULTADO GENERAL DE LA COMPARACIÓN
             # ========================================================
-
-            # Hay diferencias de auditoría cuando:
             #
-            # 1. Existe al menos un ganador calculado por Auditoría
-            #    que no aparece en el DBF.
+            # Hay diferencias cuando:
             #
-            # 2. Existe al menos un ganador del DBF que no aparece
-            #    en Auditoría.
+            # 1. Hay ganadores solo en Auditoría.
+            # 2. Hay ganadores solo en el DBF.
+            # 3. Hay diferencias de montos superiores a $100.
             #
-            # 3. Existe al menos un cupón cuyo monto tiene una
-            #    diferencia superior a la tolerancia de $100.
-            #
-            # Las diferencias monetarias <= $100 NO hacen que
-            # hay_diferencias sea True.
+            # Las diferencias monetarias <= $100
+            # no generan diferencias de auditoría.
+            # ========================================================
 
             hay_diferencias = (
                 len(solo_sistema) > 0
                 or len(solo_dbf) > 0
                 or len(
-                    comparacion_montos[
-                        "diferencias"
-                    ]
+                    comparacion_montos["diferencias"]
                 ) > 0
             )
 
@@ -540,13 +551,9 @@ def comparar_sistema_con_dbf(
                 "monto_total_dbf"
             ],
             len(
-                comparacion_montos[
-                    "diferencias"
-                ]
+                comparacion_montos["diferencias"]
             ),
-            comparacion_montos[
-                "toleradas"
-            ],
+            comparacion_montos["toleradas"],
             hay_diferencias,
         )
 
@@ -559,8 +566,6 @@ def comparar_sistema_con_dbf(
             "fecha": fecha,
             "turno": turno_normalizado,
 
-            # Resultado resumido para poder mostrar directamente
-            # el estado del Control de Aciertos.
             "hay_diferencias": hay_diferencias,
 
             "aciertos": {
@@ -603,6 +608,11 @@ def comparar_sistema_con_dbf(
             },
 
             "por_extracto": por_extracto,
+
+            # NUEVO: arreglo de extractos que requieren revisión
+            "extractos_con_diferencias": (
+                extractos_con_diferencias
+            ),
 
             "detalle": {
                 "coincidentes": len(
@@ -653,9 +663,7 @@ def comparar_sistema_con_dbf(
             },
 
             "diferencias_montos": (
-                comparacion_montos[
-                    "diferencias"
-                ]
+                comparacion_montos["diferencias"]
             ),
         }
 

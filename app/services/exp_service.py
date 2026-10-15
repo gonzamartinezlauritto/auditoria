@@ -1,3 +1,4 @@
+
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -329,6 +330,35 @@ def process_exp_fast(
                 ) in resumen_extractos_rows
             ]
 
+            # ========================================================
+            # NUEVO: TOTALES GENERALES DE TODOS LOS EXTRACTOS
+            # ========================================================
+            #
+            # Se suman los valores que ya devuelve cada extracto.
+            #
+            # No se recalculan cupones únicos.
+            # Si un cupón participa en varios extractos,
+            # se contabiliza dentro de cada uno.
+            #
+            # Esto permite que frontend reciba los totales
+            # sin tener que realizar las sumatorias.
+            # ========================================================
+
+            total_cupones_jugados = sum(
+                extracto["cupones_jugados"]
+                for extracto in resumen_extractos
+            )
+
+            total_recaudacion = float(
+                sum(
+                    (
+                        Decimal(str(extracto["recaudacion"]))
+                        for extracto in resumen_extractos
+                    ),
+                    Decimal("0.00"),
+                )
+            )
+
             tiempos["resumen_extractos_segundos"] = round(
                 time.perf_counter() - inicio,
                 2,
@@ -409,6 +439,14 @@ def process_exp_fast(
             "turnos_ignorados": turnos_ignorados,
             "cargados_turno": cargados_turno,
             "extractos": resumen_extractos,
+
+            # ====================================================
+            # NUEVO: CAMPOS SOLICITADOS POR FRONTEND
+            # ====================================================
+
+            "total_cupones_jugados": total_cupones_jugados,
+            "total_recaudacion": total_recaudacion,
+
             "modo": (
                 "copy_tmp_filter_valid_turns_"
                 "insert_on_conflict_do_nothing"
