@@ -1,11 +1,16 @@
 from psycopg2.extensions import connection
 
 
+# ============================================================
+# GANADORES - SISTEMA
+# ============================================================
+
 def obtener_ganadores_sistema(
     conn: connection,
     fecha: int,
     turno: str,
 ) -> list[tuple]:
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -28,20 +33,22 @@ def obtener_ganadores_sistema(
                 q.n_maqui,
                 q.n_cupon
             """,
-            (
-                fecha,
-                turno,
-            ),
+            (fecha, turno),
         )
 
         return cur.fetchall()
 
+
+# ============================================================
+# GANADORES - DBF
+# ============================================================
 
 def obtener_ganadores_dbf(
     conn: connection,
     fecha: int,
     turno: str,
 ) -> list[tuple]:
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -61,20 +68,22 @@ def obtener_ganadores_dbf(
                 nromaquina,
                 numero
             """,
-            (
-                fecha,
-                turno,
-            ),
+            (fecha, turno),
         )
 
         return cur.fetchall()
 
+
+# ============================================================
+# ACIERTOS POR EXTRACTO - SISTEMA
+# ============================================================
 
 def obtener_aciertos_sistema_por_extracto(
     conn: connection,
     fecha: int,
     turno: str,
 ) -> list[tuple]:
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -95,20 +104,22 @@ def obtener_aciertos_sistema_por_extracto(
             GROUP BY p.codigo_extracto
             ORDER BY p.codigo_extracto
             """,
-            (
-                fecha,
-                turno,
-            ),
+            (fecha, turno),
         )
 
         return cur.fetchall()
 
+
+# ============================================================
+# ACIERTOS POR EXTRACTO - DBF
+# ============================================================
 
 def obtener_aciertos_dbf_por_extracto(
     conn: connection,
     fecha: int,
     turno: str,
 ) -> list[tuple]:
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -121,20 +132,22 @@ def obtener_aciertos_dbf_por_extracto(
             GROUP BY codigo_extracto
             ORDER BY codigo_extracto
             """,
-            (
-                fecha,
-                turno,
-            ),
+            (fecha, turno),
         )
 
         return cur.fetchall()
 
+
+# ============================================================
+# CUPONES GANADORES ÚNICOS - SISTEMA
+# ============================================================
 
 def contar_cupones_ganadores_unicos_sistema(
     conn: connection,
     fecha: int,
     turno: str,
 ) -> int:
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -153,10 +166,7 @@ def contar_cupones_ganadores_unicos_sistema(
                   AND p.premio_total > 0
             ) t
             """,
-            (
-                fecha,
-                turno,
-            ),
+            (fecha, turno),
         )
 
         resultado = cur.fetchone()
@@ -164,11 +174,16 @@ def contar_cupones_ganadores_unicos_sistema(
         return resultado[0] if resultado else 0
 
 
+# ============================================================
+# CUPONES GANADORES ÚNICOS - DBF
+# ============================================================
+
 def contar_cupones_ganadores_unicos_dbf(
     conn: connection,
     fecha: int,
     turno: str,
 ) -> int:
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -184,10 +199,7 @@ def contar_cupones_ganadores_unicos_dbf(
                   AND turno = %s
             ) t
             """,
-            (
-                fecha,
-                turno,
-            ),
+            (fecha, turno),
         )
 
         resultado = cur.fetchone()
@@ -195,12 +207,17 @@ def contar_cupones_ganadores_unicos_dbf(
         return resultado[0] if resultado else 0
 
 
+# ============================================================
+# ACTUALIZAR CUPONES DBF EN RESUMEN
+# ============================================================
+
 def actualizar_cupones_dbf_resumen(
     conn: connection,
     fecha: int,
     turno: str,
     cantidad: int,
 ) -> None:
+
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -209,11 +226,7 @@ def actualizar_cupones_dbf_resumen(
             WHERE fecha_sorteo = %s
               AND turno = %s
             """,
-            (
-                cantidad,
-                fecha,
-                turno,
-            ),
+            (cantidad, fecha, turno),
         )
 
 
@@ -227,19 +240,10 @@ def obtener_montos_sistema_por_cupon(
     turno: str,
 ) -> list[tuple]:
     """
-    Devuelve el monto total ganado por cada cupón
-    considerando TODOS los extractos.
+    Obtiene el importe total ganado por cada cupón,
+    considerando todos los extractos.
 
-    Clave:
-    (
-        agencia,
-        subagencia,
-        maquina,
-        cupon
-    )
-
-    premio_total está almacenado en unidades internas,
-    por eso se divide por 100.
+    premio_total se divide por 100 para obtener pesos.
     """
 
     with conn.cursor() as cur:
@@ -271,10 +275,7 @@ def obtener_montos_sistema_por_cupon(
                 q.n_maqui,
                 q.n_cupon
             """,
-            (
-                fecha,
-                turno,
-            ),
+            (fecha, turno),
         )
 
         return cur.fetchall()
@@ -290,14 +291,10 @@ def obtener_montos_dbf_por_cupon(
     turno: str,
 ) -> list[tuple]:
     """
-    Devuelve el monto total ganado por cada cupón según DBF.
+    impganado puede repetirse entre extractos del mismo
+    cupón porque representa el total global ganado.
 
-    impganado puede repetirse en distintas filas/extractos
-    del mismo cupón.
-
-    Por eso NO usamos SUM(impganado).
-    Tomamos MAX(impganado), ya que representa
-    el total ganado por el cupón.
+    Por eso utilizamos MAX y no SUM.
     """
 
     with conn.cursor() as cur:
@@ -326,10 +323,147 @@ def obtener_montos_dbf_por_cupon(
                 nromaquina,
                 numero
             """,
+            (fecha, turno),
+        )
+
+        return cur.fetchall()
+
+
+# ============================================================
+# EXTRACTOS PREMIADOS DE CUPONES CON DIFERENCIAS MONETARIAS
+# ============================================================
+
+def obtener_extractos_por_cupones(
+    conn: connection,
+    fecha: int,
+    turno: str,
+    cupones: list[tuple],
+) -> list[int]:
+    """
+    Obtiene los extractos premiados asociados a los
+    cupones con diferencias monetarias.
+
+    Considera:
+      - premios del sistema
+      - aciertos del DBF
+
+    No incluye extractos donde el cupón solamente
+    tenga apuestas perdedoras.
+
+    Si el cupón tiene premios en varios extractos,
+    devuelve todos los extractos involucrados.
+    """
+
+    if not cupones:
+        return []
+
+    agencias = [int(c[0]) for c in cupones]
+    subagencias = [int(c[1]) for c in cupones]
+    maquinas = [int(c[2]) for c in cupones]
+    numeros = [int(c[3]) for c in cupones]
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH cupones_buscados (
+                agencia,
+                subagencia,
+                maquina,
+                cupon
+            ) AS (
+                SELECT *
+                FROM UNNEST(
+                    %s::integer[],
+                    %s::integer[],
+                    %s::integer[],
+                    %s::integer[]
+                )
+            )
+            SELECT DISTINCT codigo_extracto
+            FROM (
+                SELECT
+                    p.codigo_extracto
+                FROM premios p
+                JOIN quiniela_exp q
+                    ON q.id = p.quiniela_exp_id
+                JOIN cupones_buscados c
+                    ON q.n_agent = c.agencia
+                   AND q.n_subag = c.subagencia
+                   AND q.n_maqui = c.maquina
+                   AND q.n_cupon = c.cupon
+                WHERE p.fecha_sorteo = %s
+                  AND TRIM(q.c_tsorteo) = %s
+                  AND p.premio_total > 0
+
+                UNION
+
+                SELECT
+                    d.codigo_extracto
+                FROM aciertos_dbf d
+                JOIN cupones_buscados c
+                    ON d.agencia = c.agencia
+                   AND d.subagencia = c.subagencia
+                   AND d.nromaquina = c.maquina
+                   AND d.numero = c.cupon
+                WHERE d.fecha_sorteo = %s
+                  AND TRIM(d.turno) = %s
+            ) extractos
+            WHERE codigo_extracto IS NOT NULL
+            ORDER BY codigo_extracto
+            """,
             (
+                agencias,
+                subagencias,
+                maquinas,
+                numeros,
+                fecha,
+                turno,
                 fecha,
                 turno,
             ),
+        )
+
+        return [int(row[0]) for row in cur.fetchall()]
+
+
+# ============================================================
+# NUEVO: IMPORTES APOSTADOS POR EXTRACTO
+# ============================================================
+
+def obtener_importes_apostados_por_extracto(
+    conn: connection,
+    fecha: int,
+    turno: str,
+) -> list[tuple]:
+    """
+    Obtiene la recaudación registrada en quiniela_exp
+    por fecha, turno y extracto.
+
+    Incluye todas las apuestas:
+      - ganadoras
+      - perdedoras
+
+    n_impapos se divide por 100 para obtener pesos.
+
+    No modifica ni consulta los premios calculados.
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                n_codext AS codigo_extracto,
+                COALESCE(
+                    SUM(n_impapos),
+                    0
+                ) / 100.0 AS importe_apostado
+            FROM quiniela_exp
+            WHERE n_fsorteo = %s
+              AND TRIM(c_tsorteo) = %s
+            GROUP BY n_codext
+            ORDER BY n_codext
+            """,
+            (fecha, turno),
         )
 
         return cur.fetchall()
