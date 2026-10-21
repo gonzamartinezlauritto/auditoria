@@ -467,3 +467,111 @@ def obtener_importes_apostados_por_extracto(
         )
 
         return cur.fetchall()
+
+
+# ============================================================
+# IMPORTES APOSTADOS POR CUPONES
+# ============================================================
+
+def obtener_importes_apostados_cupones(
+    conn: connection,
+    fecha: int,
+    turno: str,
+    cupones: list[tuple],
+) -> list[tuple]:
+    """
+    Obtiene el importe apostado por cupón y extracto.
+
+    Considera todas las líneas de apuesta del cupón.
+
+    n_impapos está almacenado en centavos,
+    por lo que se divide entre 100 para obtener pesos.
+
+    Devuelve:
+        codigo_extracto,
+        agencia,
+        subagencia,
+        maquina,
+        cupon,
+        importe_apostado
+    """
+
+    if not cupones:
+        return []
+
+    columnas = list(zip(*cupones))
+
+    codigos_extracto = [int(x) for x in columnas[0]]
+    agencias = [int(x) for x in columnas[1]]
+    subagencias = [int(x) for x in columnas[2]]
+    maquinas = [int(x) for x in columnas[3]]
+    numeros_cupon = [int(x) for x in columnas[4]]
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH cupones_buscados AS (
+                SELECT DISTINCT
+                    codigo_extracto,
+                    agencia,
+                    subagencia,
+                    maquina,
+                    cupon
+                FROM UNNEST(
+                    %s::integer[],
+                    %s::integer[],
+                    %s::integer[],
+                    %s::integer[],
+                    %s::integer[]
+                ) AS x(
+                    codigo_extracto,
+                    agencia,
+                    subagencia,
+                    maquina,
+                    cupon
+                )
+            )
+            SELECT
+                q.n_codext,
+                q.n_agent,
+                q.n_subag,
+                q.n_maqui,
+                q.n_cupon,
+                COALESCE(
+                    SUM(q.n_impapos),
+                    0
+                ) / 100.0 AS importe_apostado
+            FROM quiniela_exp q
+            JOIN cupones_buscados c
+                ON q.n_codext = c.codigo_extracto
+               AND q.n_agent = c.agencia
+               AND q.n_subag = c.subagencia
+               AND q.n_maqui = c.maquina
+               AND q.n_cupon = c.cupon
+            WHERE q.n_fsorteo = %s
+              AND TRIM(q.c_tsorteo) = %s
+            GROUP BY
+                q.n_codext,
+                q.n_agent,
+                q.n_subag,
+                q.n_maqui,
+                q.n_cupon
+            ORDER BY
+                q.n_codext,
+                q.n_agent,
+                q.n_subag,
+                q.n_maqui,
+                q.n_cupon
+            """,
+            (
+                codigos_extracto,
+                agencias,
+                subagencias,
+                maquinas,
+                numeros_cupon,
+                fecha,
+                turno,
+            ),
+        )
+
+        return cur.fetchall()

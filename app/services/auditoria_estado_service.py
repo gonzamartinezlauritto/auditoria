@@ -2,6 +2,9 @@ from typing import Any
 
 from psycopg2.extensions import connection
 
+from decimal import Decimal, ROUND_HALF_UP
+from app.repositories import comparacion_repository 
+
 from app.core.logger import logger
 from app.core.transaction import transaction
 from app.exceptions.base import AppException
@@ -408,133 +411,347 @@ def reabrir_evento(
 # ESTADO POR FECHA
 # =========================================================
 
+# =========================================================
+# ESTADO POR FECHA
+# =========================================================
+
 def obtener_estado_por_fecha(
     fecha: int,
 ) -> dict[str, Any]:
+
+    def normalizar_monto(valor) -> Decimal:
+        return Decimal(str(valor or 0)).quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
+
+    def obtener_extractos_con_diferencias(
+        conn: connection,
+        turno: str,
+    ) -> list[int]:
+
+        # ====================================================
+        # GANADORES SISTEMA Y DBF
+        # ====================================================
+
+        ganadores_sistema = (
+            comparacion_repository.obtener_ganadores_sistema(
+                conn=conn,
+                fecha=fecha,
+                turno=turno,
+            )
+        )
+
+        ganadores_dbf = (
+            comparacion_repository.obtener_ganadores_dbf(
+                conn=conn,
+                fecha=fecha,
+                turno=turno,
+            )
+        )
+
+        set_sistema = set(ganadores_sistema)
+        set_dbf = set(ganadores_dbf)
+
+        solo_sistema = set_sistema - set_dbf
+        solo_dbf = set_dbf - set_sistema
+
+        extractos = {
+            int(item[0])
+            for item in solo_sistema | solo_dbf
+        }
+
+        # ====================================================
+        # DIFERENCIAS EN CANTIDAD POR EXTRACTO
+        # ====================================================
+
+        aciertos_sistema = (
+            comparacion_repository
+            .obtener_aciertos_sistema_por_extracto(
+                conn=conn,
+                fecha=fecha,
+                turno=turno,
+            )
+        )
+
+        aciertos_dbf = (
+            comparacion_repository
+            .obtener_aciertos_dbf_por_extracto(
+                conn=conn,
+                fecha=fecha,
+                turno=turno,
+            )
+        )
+
+        cantidades_sistema = {
+            int(codigo): int(cantidad)
+            for codigo, cantidad in aciertos_sistema
+        }
+
+        cantidades_dbf = {
+            int(codigo): int(cantidad)
+            for codigo, cantidad in aciertos_dbf
+        }
+
+        for codigo in (
+            set(cantidades_sistema)
+            | set(cantidades_dbf)
+        ):
+            if (
+                cantidades_sistema.get(codigo, 0)
+                != cantidades_dbf.get(codigo, 0)
+            ):
+                extractos.add(codigo)
+
+        # ====================================================
+        # DIFERENCIAS MONETARIAS POR CUPÓN GLOBAL
+        # ====================================================
+
+        montos_sistema = (
+            comparacion_repository
+            .obtener_montos_sistema_por_cupon(
+                conn=conn,
+                fecha=fecha,
+                turno=turno,
+            )
+        )
+
+        montos_dbf = (
+            comparacion_repository
+            .obtener_montos_dbf_por_cupon(
+                conn=conn,
+                fecha=fecha,
+                turno=turno,
+            )
+        )
+
+        sistema_dict = {
+            (
+                int(agencia),
+                int(subagencia),
+                int(maquina),
+                int(cupon),
+            ): normalizar_monto(monto)
+            for (
+                agencia,
+                subagencia,
+                maquina,
+                cupon,
+                monto,
+            ) in montos_sistema
+        }
+
+        dbf_dict = {
+            (
+                int(agencia),
+                int(subagencia),
+                int(maquina),
+                int(cupon),
+            ): normalizar_monto(monto)
+            for (
+                agencia,
+                subagencia,
+                maquina,
+                cupon,
+                monto,
+            ) in montos_dbf
+        }
+
+        cupones_con_diferencias = []
+
+        tolerancia = Decimal("100.00")
+
+        for clave in set(sistema_dict) | set(dbf_dict):
+
+            monto_sistema = sistema_dict.get(
+                clave,
+                Decimal("0.00"),
+            )
+
+            monto_dbf = dbf_dict.get(
+                clave,
+                Decimal("0.00"),
+            )
+
+            diferencia = abs(
+                monto_sistema - monto_dbf
+            )
+
+            if diferencia > tolerancia:
+                cupones_con_diferencias.append(clave)
+
+        # ====================================================
+        # IDENTIFICAR EXTRACTOS DE DIFERENCIAS MONETARIAS
+        # ====================================================
+
+        extractos_montos = (
+            comparacion_repository
+            .obtener_extractos_por_cupones(
+                conn=conn,
+                fecha=fecha,
+                turno=turno,
+                cupones=cupones_con_diferencias,
+            )
+        )
+
+        extractos.update(
+            int(codigo)
+            for codigo in extractos_montos
+        )
+
+        return sorted(extractos)
+
     try:
         with transaction() as conn:
+
             rows = auditoria_repository.obtener_estado_por_fecha(
                 conn=conn,
                 fecha=fecha,
             )
 
-        turnos: list[dict[str, Any]] = []
+            turnos: list[dict[str, Any]] = []
 
-        for row in rows:
-            (
-                _fecha_sorteo,
-                turno,
-                exp_cargado,
-                resultados_cargados,
-                dbf_cargado,
-                calculo_ejecutado,
-                archivo_exp,
-                archivo_dbf,
-                fecha_exp,
-                fecha_dbf,
-                fecha_calculo,
-                comparacion_ejecutada,
-                fecha_comparacion,
-                hay_diferencias,
-                evento_cerrado,
-                fecha_cierre,
-                cerrado_por,
-                fecha_reapertura,
-                reabierto_por,
-                motivo_reapertura,
-                updated_at,
-            ) = row
+            for row in rows:
+                (
+                    _fecha_sorteo,
+                    turno,
+                    exp_cargado,
+                    resultados_cargados,
+                    dbf_cargado,
+                    calculo_ejecutado,
+                    archivo_exp,
+                    archivo_dbf,
+                    fecha_exp,
+                    fecha_dbf,
+                    fecha_calculo,
+                    comparacion_ejecutada,
+                    fecha_comparacion,
+                    hay_diferencias,
+                    evento_cerrado,
+                    fecha_cierre,
+                    cerrado_por,
+                    fecha_reapertura,
+                    reabierto_por,
+                    motivo_reapertura,
+                    updated_at,
+                ) = row
 
-            turnos.append(
-                {
-                    "turno": turno,
+                turno_normalizado = turno.upper().strip()
 
-                    "exp_cargado": bool(
-                        exp_cargado
-                    ),
+                # ====================================================
+                # NUEVO: EXTRACTOS CON DIFERENCIAS
+                # ====================================================
 
-                    "resultados_cargados": bool(
-                        resultados_cargados
-                    ),
+                extractos_con_diferencias = []
 
-                    "dbf_cargado": bool(
-                        dbf_cargado
-                    ),
+                if (
+                    comparacion_ejecutada
+                    and hay_diferencias
+                ):
+                    extractos_con_diferencias = (
+                        obtener_extractos_con_diferencias(
+                            conn=conn,
+                            turno=turno_normalizado,
+                        )
+                    )
 
-                    "calculo_ejecutado": bool(
-                        calculo_ejecutado
-                    ),
+                # ====================================================
+                # ARMAR RESPONSE DEL TURNO
+                # ====================================================
 
-                    "comparacion_ejecutada": bool(
-                        comparacion_ejecutada
-                    ),
+                turnos.append(
+                    {
+                        "turno": turno,
 
-                    # NULL significa que no existe una
-                    # comparación vigente.
-                    "hay_diferencias": (
-                        bool(hay_diferencias)
-                        if hay_diferencias is not None
-                        else None
-                    ),
+                        "exp_cargado": bool(
+                            exp_cargado
+                        ),
 
-                    "evento_cerrado": bool(
-                        evento_cerrado
-                    ),
+                        "resultados_cargados": bool(
+                            resultados_cargados
+                        ),
 
-                    "archivo_exp": archivo_exp,
-                    "archivo_dbf": archivo_dbf,
+                        "dbf_cargado": bool(
+                            dbf_cargado
+                        ),
 
-                    "fecha_exp": (
-                        str(fecha_exp)
-                        if fecha_exp
-                        else None
-                    ),
+                        "calculo_ejecutado": bool(
+                            calculo_ejecutado
+                        ),
 
-                    "fecha_dbf": (
-                        str(fecha_dbf)
-                        if fecha_dbf
-                        else None
-                    ),
+                        "comparacion_ejecutada": bool(
+                            comparacion_ejecutada
+                        ),
 
-                    "fecha_calculo": (
-                        str(fecha_calculo)
-                        if fecha_calculo
-                        else None
-                    ),
+                        "hay_diferencias": (
+                            bool(hay_diferencias)
+                            if hay_diferencias is not None
+                            else None
+                        ),
 
-                    "fecha_comparacion": (
-                        str(fecha_comparacion)
-                        if fecha_comparacion
-                        else None
-                    ),
+                        # NUEVO CAMPO
+                        "extractos_con_diferencias": (
+                            extractos_con_diferencias
+                        ),
 
-                    "fecha_cierre": (
-                        str(fecha_cierre)
-                        if fecha_cierre
-                        else None
-                    ),
+                        "evento_cerrado": bool(
+                            evento_cerrado
+                        ),
 
-                    "cerrado_por": cerrado_por,
+                        "archivo_exp": archivo_exp,
+                        "archivo_dbf": archivo_dbf,
 
-                    "fecha_reapertura": (
-                        str(fecha_reapertura)
-                        if fecha_reapertura
-                        else None
-                    ),
+                        "fecha_exp": (
+                            str(fecha_exp)
+                            if fecha_exp
+                            else None
+                        ),
 
-                    "reabierto_por": reabierto_por,
+                        "fecha_dbf": (
+                            str(fecha_dbf)
+                            if fecha_dbf
+                            else None
+                        ),
 
-                    "motivo_reapertura": (
-                        motivo_reapertura
-                    ),
+                        "fecha_calculo": (
+                            str(fecha_calculo)
+                            if fecha_calculo
+                            else None
+                        ),
 
-                    "updated_at": (
-                        str(updated_at)
-                        if updated_at
-                        else None
-                    ),
-                }
-            )
+                        "fecha_comparacion": (
+                            str(fecha_comparacion)
+                            if fecha_comparacion
+                            else None
+                        ),
+
+                        "fecha_cierre": (
+                            str(fecha_cierre)
+                            if fecha_cierre
+                            else None
+                        ),
+
+                        "cerrado_por": cerrado_por,
+
+                        "fecha_reapertura": (
+                            str(fecha_reapertura)
+                            if fecha_reapertura
+                            else None
+                        ),
+
+                        "reabierto_por": reabierto_por,
+
+                        "motivo_reapertura": (
+                            motivo_reapertura
+                        ),
+
+                        "updated_at": (
+                            str(updated_at)
+                            if updated_at
+                            else None
+                        ),
+                    }
+                )
 
         return {
             "ok": True,
@@ -553,7 +770,6 @@ def obtener_estado_por_fecha(
         )
 
         raise error
-
 
 # =========================================================
 # HISTORIAL DEL EVENTO

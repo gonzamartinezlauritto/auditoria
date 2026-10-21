@@ -1,3 +1,4 @@
+
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
@@ -11,12 +12,14 @@ from app.exceptions.calculo_exceptions import (
     ResultadosNoEncontradosError,
     SinExtractosParaCalcularError,
 )
+
 from app.repositories import calculo_repository
 from app.services.auditoria_estado_service import (
     invalidar_comparacion,
     marcar_calculo_ejecutado,
     validar_evento_abierto,
 )
+
 from app.services.premios_service import (
     buscar_aproximado,
     calcular_premio,
@@ -28,6 +31,7 @@ from app.services.premios_service import (
     obtener_multiplicador,
     redondear_a_diez_centavos,
 )
+
 from app.services.redoblona_service import (
     ajustar_rango_detalle_redoblona,
     calcular_tope_redoblona,
@@ -95,30 +99,16 @@ def _mapear_apuestas(
                 "n_fsorteo": row[11],
                 "n_codlot": row[12],
                 "c_tsorteo": row[13],
-                "n_alcdes": int(
-                    row[14] or 0
-                ),
-                "n_alchas": int(
-                    row[15] or 0
-                ),
-                "c_nroapos": limpiar_numero(
-                    row[16]
-                ),
+                "n_alcdes": int(row[14] or 0),
+                "n_alchas": int(row[15] or 0),
+                "c_nroapos": limpiar_numero(row[16]),
                 "n_impapos": Decimal(
                     str(row[17] or 0)
-                ).quantize(
-                    Decimal("0.01")
-                ),
-                "n_nodef": int(
-                    row[18] or 0
-                ),
+                ).quantize(Decimal("0.01")),
+                "n_nodef": int(row[18] or 0),
                 "n_codext": row[19],
-                "es_redoblona_base": bool(
-                    row[20]
-                ),
-                "es_redoblona_detalle": bool(
-                    row[21]
-                ),
+                "es_redoblona_base": bool(row[20]),
+                "es_redoblona_detalle": bool(row[21]),
                 "linea_base_id": row[22],
                 "redoblona_grupo": row[23],
             }
@@ -139,9 +129,7 @@ def _agrupar_redoblonas(
             grupos.setdefault(
                 grupo,
                 [],
-            ).append(
-                apuesta
-            )
+            ).append(apuesta)
 
     return grupos
 
@@ -160,13 +148,26 @@ def _procesar_redoblona(
     p1,
     tope_redoblona: Decimal,
 ) -> None:
-    numero = actual["c_nroapos"]
+    # =============================================
+    # DATOS DE LA BASE
+    # =============================================
+
+    numero_base = actual["c_nroapos"]
+    numero_detalle = detalle["c_nroapos"]
+
     importe = actual["n_impapos"]
     desde = actual["n_alcdes"]
     hasta = actual["n_alchas"]
 
+    if importe <= 0:
+        return
+
+    # =============================================
+    # OBTENER TODOS LOS ACIERTOS DE LA BASE
+    # =============================================
+
     hits_base = obtener_hits(
-        numero,
+        numero_base,
         desde,
         hasta,
         resultados,
@@ -175,47 +176,17 @@ def _procesar_redoblona(
     if not hits_base:
         return
 
-    (
-        orden_base,
-        _resultado_base,
-        cifras_base,
-    ) = hits_base[0]
-
-    multiplicador_base = obtener_multiplicador(
-        cifras_base,
-        p4,
-        p3,
-        p2,
-        p1,
-    )
-
-    if multiplicador_base <= 0:
-        return
-
     puestos_base = cantidad_puestos(
         desde,
         hasta,
     )
 
-    premio_base_unitario = calcular_premio(
-        importe,
-        multiplicador_base,
-        puestos_base,
-    )
+    if puestos_base <= 0:
+        return
 
-    repeticiones_base = len(
-        hits_base
-    )
-
-    premio_base_total = (
-        premio_base_unitario
-        * Decimal(
-            repeticiones_base
-        )
-    ).quantize(
-        Decimal("0.01"),
-        rounding=ROUND_HALF_UP,
-    )
+    # =============================================
+    # RANGO DEL DETALLE
+    # =============================================
 
     (
         detalle_desde,
@@ -228,36 +199,13 @@ def _procesar_redoblona(
     )
 
     hits_detalle = obtener_hits(
-        detalle["c_nroapos"],
+        numero_detalle,
         detalle_desde,
         detalle_hasta,
         resultados,
     )
 
-    hits_detalle = [
-        hit
-        for hit in hits_detalle
-        if hit[0] != orden_base
-    ]
-
     if not hits_detalle:
-        return
-
-    (
-        orden_detalle,
-        resultado_detalle,
-        cifras_detalle,
-    ) = hits_detalle[0]
-
-    multiplicador_detalle = obtener_multiplicador(
-        cifras_detalle,
-        p4,
-        p3,
-        p2,
-        p1,
-    )
-
-    if multiplicador_detalle <= 0:
         return
 
     puestos_detalle = cantidad_puestos(
@@ -265,25 +213,184 @@ def _procesar_redoblona(
         detalle_hasta,
     )
 
-    premio_detalle_unitario = calcular_premio(
-        premio_base_total,
-        multiplicador_detalle,
-        puestos_detalle,
+    if puestos_detalle <= 0:
+        return
+
+    # =============================================
+    # COMBINACIONES BASE - DETALLE
+    # =============================================
+    #
+    # Una redoblona está formada por dos líneas:
+    # base y detalle.
+    #
+    # Ambos números deben acertar.
+    #
+    # Se evalúan todas las parejas de aciertos
+    # que utilizan posiciones diferentes.
+    #
+    # Ejemplo:
+    #
+    # Base 20: puestos 1 y 3
+    # Detalle 82: puesto 7
+    #
+    # Combinaciones:
+    # (1, 7)
+    # (3, 7)
+    #
+    # Si base y detalle son el mismo número,
+    # una pareja de puestos se cuenta una vez.
+    #
+    # Ejemplo:
+    #
+    # Base 23: puestos 2 y 6
+    # Detalle 23: puestos 2 y 6
+    #
+    # Combinación única:
+    # {2, 6}
+    #
+    # Esta regla es experimental y debe
+    # validarse contra otros sorteos.
+    # =============================================
+
+    mismos_numeros = (
+        numero_base == numero_detalle
     )
 
-    repeticiones_detalle = len(
-        hits_detalle
-    )
+    combinaciones_vistas = set()
 
-    premio_detalle_total = (
-        premio_detalle_unitario
-        * Decimal(
-            repeticiones_detalle
+    premio_total = Decimal("0.00")
+    premio_base_acumulado = Decimal("0.00")
+
+    cantidad_combinaciones = 0
+
+    # Conservamos un resultado de detalle para
+    # registrar el premio en la tabla premios.
+    primer_detalle_ganador = None
+
+    for (
+        orden_base,
+        resultado_base,
+        cifras_base,
+    ) in hits_base:
+
+        multiplicador_base = obtener_multiplicador(
+            cifras_base,
+            p4,
+            p3,
+            p2,
+            p1,
         )
-    ).quantize(
+
+        if multiplicador_base <= 0:
+            continue
+
+        premio_base_unitario = calcular_premio(
+            importe,
+            multiplicador_base,
+            puestos_base,
+        )
+
+        if premio_base_unitario <= 0:
+            continue
+
+        for (
+            orden_detalle,
+            resultado_detalle,
+            cifras_detalle,
+        ) in hits_detalle:
+
+            # Una misma posición no puede utilizarse
+            # como base y detalle simultáneamente.
+            if orden_base == orden_detalle:
+                continue
+
+            if mismos_numeros:
+                # Evitar duplicar parejas como:
+                # (2, 6) y (6, 2).
+                clave_combinacion = tuple(
+                    sorted(
+                        (
+                            orden_base,
+                            orden_detalle,
+                        )
+                    )
+                )
+            else:
+                # Para números distintos, la base
+                # y el detalle tienen roles definidos.
+                clave_combinacion = (
+                    orden_base,
+                    orden_detalle,
+                )
+
+            if clave_combinacion in combinaciones_vistas:
+                continue
+
+            multiplicador_detalle = obtener_multiplicador(
+                cifras_detalle,
+                p4,
+                p3,
+                p2,
+                p1,
+            )
+
+            if multiplicador_detalle <= 0:
+                continue
+
+            premio_combinacion = calcular_premio(
+                premio_base_unitario,
+                multiplicador_detalle,
+                puestos_detalle,
+            )
+
+            if premio_combinacion <= 0:
+                continue
+
+            combinaciones_vistas.add(
+                clave_combinacion
+            )
+
+            premio_total += premio_combinacion
+
+            premio_base_acumulado += (
+                premio_base_unitario
+            )
+
+            cantidad_combinaciones += 1
+
+            if primer_detalle_ganador is None:
+                primer_detalle_ganador = (
+                    orden_detalle,
+                    resultado_detalle,
+                    cifras_detalle,
+                    multiplicador_detalle,
+                )
+
+    # =============================================
+    # VERIFICAR COMBINACIONES GANADORAS
+    # =============================================
+
+    if cantidad_combinaciones == 0:
+        return
+
+    if primer_detalle_ganador is None:
+        return
+
+    premio_total = premio_total.quantize(
         Decimal("0.01"),
         rounding=ROUND_HALF_UP,
     )
+
+    premio_base_acumulado = (
+        premio_base_acumulado.quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
+    )
+
+    # =============================================
+    # APLICAR TOPE DE REDOBLONA
+    # =============================================
 
     tope = calcular_tope_redoblona(
         importe,
@@ -293,7 +400,7 @@ def _procesar_redoblona(
     )
 
     premio_final = min(
-        premio_detalle_total,
+        premio_total,
         tope,
     ).quantize(
         Decimal("0.01"),
@@ -303,6 +410,25 @@ def _procesar_redoblona(
     if premio_final <= 0:
         return
 
+    (
+        orden_detalle,
+        resultado_detalle,
+        cifras_detalle,
+        multiplicador_detalle,
+    ) = primer_detalle_ganador
+
+    # =============================================
+    # GUARDAR PREMIO
+    # =============================================
+    #
+    # Se guarda un registro por apuesta de
+    # redoblona, con el premio total de todas
+    # sus combinaciones válidas.
+    #
+    # premio_base_redoblona almacena la suma
+    # de premios base utilizados.
+    # =============================================
+
     calculo_repository.insertar_premio(
         conn=conn,
         data=(
@@ -310,8 +436,8 @@ def _procesar_redoblona(
             fecha,
             codigo_extracto,
             (
-                f"{numero}/"
-                f"{detalle['c_nroapos']}"
+                f"{numero_base}/"
+                f"{numero_detalle}"
             ),
             normalizar_resultado(
                 resultado_detalle
@@ -323,7 +449,7 @@ def _procesar_redoblona(
             premio_final,
             "redoblona",
             detalle["id"],
-            premio_base_total,
+            premio_base_acumulado,
         ),
     )
 
@@ -497,21 +623,15 @@ def calcular_extracto(
     ) = extracto
 
     aprox4 = Decimal(
-        str(
-            aprox4 or 100
-        )
+        str(aprox4 or 100)
     )
 
     aprox3 = Decimal(
-        str(
-            aprox3 or 10
-        )
+        str(aprox3 or 10)
     )
 
     tope_redoblona = Decimal(
-        str(
-            tope_redoblona or 1000
-        )
+        str(tope_redoblona or 1000)
     )
 
     calculo_repository.eliminar_premios_extracto(
