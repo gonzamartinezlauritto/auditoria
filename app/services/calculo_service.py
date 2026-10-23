@@ -747,7 +747,18 @@ def calcular_extracto(
             aprox3=aprox3,
         )
 
-    total_normales = redondear_a_diez_centavos(
+    # =============================================
+    # TOTALES DE PREMIOS
+    # =============================================
+    # Los premios están almacenados en una escala
+    # de 100, por eso se dividen por Decimal("100").
+    #
+    # Conservamos la precisión de cada categoría
+    # y redondeamos únicamente el total final
+    # a dos decimales.
+    # =============================================
+
+    total_normales = (
         calculo_repository.obtener_total_premios_normales(
             conn=conn,
             fecha=fecha,
@@ -757,7 +768,7 @@ def calcular_extracto(
         / Decimal("100")
     )
 
-    total_aproximaciones = redondear_a_diez_centavos(
+    total_aproximaciones = (
         calculo_repository.obtener_total_aproximaciones(
             conn=conn,
             fecha=fecha,
@@ -767,7 +778,7 @@ def calcular_extracto(
         / Decimal("100")
     )
 
-    total_redoblonas = redondear_a_diez_centavos(
+    total_redoblonas = (
         calculo_repository.obtener_total_redoblonas(
             conn=conn,
             fecha=fecha,
@@ -777,12 +788,13 @@ def calcular_extracto(
         / Decimal("100")
     )
 
-    total_final = redondear_a_diez_centavos(
+    total_final = (
         total_normales
         + total_aproximaciones
         + total_redoblonas
     ).quantize(
-        Decimal("0.01")
+        Decimal("0.01"),
+        rounding=ROUND_HALF_UP,
     )
 
     cant_premios = (
