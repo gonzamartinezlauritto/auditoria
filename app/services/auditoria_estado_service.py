@@ -1,9 +1,7 @@
+
 from typing import Any
 
 from psycopg2.extensions import connection
-
-from decimal import Decimal, ROUND_HALF_UP
-from app.repositories import comparacion_repository 
 
 from app.core.logger import logger
 from app.core.transaction import transaction
@@ -16,7 +14,7 @@ from app.exceptions.auditoria_exceptions import (
     EventoYaCerradoError,
     MotivoReaperturaRequeridoError,
 )
-from app.repositories import auditoria_repository
+from app.repositories import auditoria_repository, comparacion_repository
 
 
 # =========================================================
@@ -139,21 +137,19 @@ def validar_evento_abierto(
     if not evento:
         return
 
-    # Estructura actual de obtener_evento():
+    # Estructura de obtener_evento():
     #
-    # 0  fecha_sorteo
-    # 1  turno
-    # 2  exp_cargado
-    # 3  resultados_cargados
-    # 4  dbf_cargado
-    # 5  calculo_ejecutado
-    # 6  comparacion_ejecutada
-    # 7  hay_diferencias
-    # 8  evento_cerrado
+    # 0 fecha_sorteo
+    # 1 turno
+    # 2 exp_cargado
+    # 3 resultados_cargados
+    # 4 dbf_cargado
+    # 5 calculo_ejecutado
+    # 6 comparacion_ejecutada
+    # 7 hay_diferencias
+    # 8 evento_cerrado
 
-    evento_cerrado = bool(
-        evento[8]
-    )
+    evento_cerrado = bool(evento[8])
 
     if evento_cerrado:
         raise EventoCerradoError(
@@ -223,29 +219,19 @@ def cerrar_evento(
             etapas_pendientes: list[str] = []
 
             if not exp_cargado:
-                etapas_pendientes.append(
-                    "EXP"
-                )
+                etapas_pendientes.append("EXP")
 
             if not resultados_cargados:
-                etapas_pendientes.append(
-                    "resultados"
-                )
+                etapas_pendientes.append("resultados")
 
             if not calculo_ejecutado:
-                etapas_pendientes.append(
-                    "cálculo"
-                )
+                etapas_pendientes.append("cálculo")
 
             if not dbf_cargado:
-                etapas_pendientes.append(
-                    "DBF"
-                )
+                etapas_pendientes.append("DBF")
 
             if not comparacion_ejecutada:
-                etapas_pendientes.append(
-                    "comparación"
-                )
+                etapas_pendientes.append("comparación")
 
             if etapas_pendientes:
                 raise EventoIncompletoError(
@@ -338,11 +324,7 @@ def reabrir_evento(
                     )
                 )
 
-            # Ahora evento_cerrado se encuentra
-            # en la posición 8.
-            evento_cerrado = bool(
-                evento[8]
-            )
+            evento_cerrado = bool(evento[8])
 
             if not evento_cerrado:
                 raise EventoYaAbiertoError(
@@ -411,59 +393,18 @@ def reabrir_evento(
 # ESTADO POR FECHA
 # =========================================================
 
-# =========================================================
-# ESTADO POR FECHA
-# =========================================================
-
 def obtener_estado_por_fecha(
     fecha: int,
 ) -> dict[str, Any]:
 
-    def normalizar_monto(valor) -> Decimal:
-        return Decimal(str(valor or 0)).quantize(
-            Decimal("0.01"),
-            rounding=ROUND_HALF_UP,
-        )
+    # =====================================================
+    # EXTRACTOS CON DIFERENCIAS EN CANTIDAD DE ACIERTOS
+    # =====================================================
 
     def obtener_extractos_con_diferencias(
         conn: connection,
         turno: str,
     ) -> list[int]:
-
-        # ====================================================
-        # GANADORES SISTEMA Y DBF
-        # ====================================================
-
-        ganadores_sistema = (
-            comparacion_repository.obtener_ganadores_sistema(
-                conn=conn,
-                fecha=fecha,
-                turno=turno,
-            )
-        )
-
-        ganadores_dbf = (
-            comparacion_repository.obtener_ganadores_dbf(
-                conn=conn,
-                fecha=fecha,
-                turno=turno,
-            )
-        )
-
-        set_sistema = set(ganadores_sistema)
-        set_dbf = set(ganadores_dbf)
-
-        solo_sistema = set_sistema - set_dbf
-        solo_dbf = set_dbf - set_sistema
-
-        extractos = {
-            int(item[0])
-            for item in solo_sistema | solo_dbf
-        }
-
-        # ====================================================
-        # DIFERENCIAS EN CANTIDAD POR EXTRACTO
-        # ====================================================
 
         aciertos_sistema = (
             comparacion_repository
@@ -493,113 +434,17 @@ def obtener_estado_por_fecha(
             for codigo, cantidad in aciertos_dbf
         }
 
-        for codigo in (
+        codigos = (
             set(cantidades_sistema)
             | set(cantidades_dbf)
-        ):
-            if (
-                cantidades_sistema.get(codigo, 0)
-                != cantidades_dbf.get(codigo, 0)
-            ):
-                extractos.add(codigo)
-
-        # ====================================================
-        # DIFERENCIAS MONETARIAS POR CUPÓN GLOBAL
-        # ====================================================
-
-        montos_sistema = (
-            comparacion_repository
-            .obtener_montos_sistema_por_cupon(
-                conn=conn,
-                fecha=fecha,
-                turno=turno,
-            )
         )
 
-        montos_dbf = (
-            comparacion_repository
-            .obtener_montos_dbf_por_cupon(
-                conn=conn,
-                fecha=fecha,
-                turno=turno,
-            )
+        return sorted(
+            codigo
+            for codigo in codigos
+            if cantidades_sistema.get(codigo, 0)
+            != cantidades_dbf.get(codigo, 0)
         )
-
-        sistema_dict = {
-            (
-                int(agencia),
-                int(subagencia),
-                int(maquina),
-                int(cupon),
-            ): normalizar_monto(monto)
-            for (
-                agencia,
-                subagencia,
-                maquina,
-                cupon,
-                monto,
-            ) in montos_sistema
-        }
-
-        dbf_dict = {
-            (
-                int(agencia),
-                int(subagencia),
-                int(maquina),
-                int(cupon),
-            ): normalizar_monto(monto)
-            for (
-                agencia,
-                subagencia,
-                maquina,
-                cupon,
-                monto,
-            ) in montos_dbf
-        }
-
-        cupones_con_diferencias = []
-
-        tolerancia = Decimal("100.00")
-
-        for clave in set(sistema_dict) | set(dbf_dict):
-
-            monto_sistema = sistema_dict.get(
-                clave,
-                Decimal("0.00"),
-            )
-
-            monto_dbf = dbf_dict.get(
-                clave,
-                Decimal("0.00"),
-            )
-
-            diferencia = abs(
-                monto_sistema - monto_dbf
-            )
-
-            if diferencia > tolerancia:
-                cupones_con_diferencias.append(clave)
-
-        # ====================================================
-        # IDENTIFICAR EXTRACTOS DE DIFERENCIAS MONETARIAS
-        # ====================================================
-
-        extractos_montos = (
-            comparacion_repository
-            .obtener_extractos_por_cupones(
-                conn=conn,
-                fecha=fecha,
-                turno=turno,
-                cupones=cupones_con_diferencias,
-            )
-        )
-
-        extractos.update(
-            int(codigo)
-            for codigo in extractos_montos
-        )
-
-        return sorted(extractos)
 
     try:
         with transaction() as conn:
@@ -638,9 +483,9 @@ def obtener_estado_por_fecha(
 
                 turno_normalizado = turno.upper().strip()
 
-                # ====================================================
-                # NUEVO: EXTRACTOS CON DIFERENCIAS
-                # ====================================================
+                # =============================================
+                # EXTRACTOS CON DIFERENCIAS
+                # =============================================
 
                 extractos_con_diferencias = []
 
@@ -655,9 +500,9 @@ def obtener_estado_por_fecha(
                         )
                     )
 
-                # ====================================================
+                # =============================================
                 # ARMAR RESPONSE DEL TURNO
-                # ====================================================
+                # =============================================
 
                 turnos.append(
                     {
@@ -689,7 +534,6 @@ def obtener_estado_por_fecha(
                             else None
                         ),
 
-                        # NUEVO CAMPO
                         "extractos_con_diferencias": (
                             extractos_con_diferencias
                         ),
@@ -771,6 +615,7 @@ def obtener_estado_por_fecha(
 
         raise error
 
+
 # =========================================================
 # HISTORIAL DEL EVENTO
 # =========================================================
@@ -804,22 +649,12 @@ def obtener_historial_evento(
 
             historial.append(
                 {
-                    "id": int(
-                        historial_id
-                    ),
-
-                    "fecha": int(
-                        fecha_sorteo
-                    ),
-
+                    "id": int(historial_id),
+                    "fecha": int(fecha_sorteo),
                     "turno": turno_evento,
-
                     "accion": accion,
-
                     "usuario": usuario,
-
                     "motivo": motivo,
-
                     "fecha_operacion": (
                         str(created_at)
                         if created_at

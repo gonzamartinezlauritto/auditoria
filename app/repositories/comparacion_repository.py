@@ -575,3 +575,101 @@ def obtener_importes_apostados_cupones(
         )
 
         return cur.fetchall()
+
+# ============================================================
+# IMPORTES APOSTADOS POR CUPÓN GLOBAL
+# PARA DIFERENCIAS DE MONTOS
+# ============================================================
+
+def obtener_importes_apostados_cupones_global(
+    conn: connection,
+    fecha: int,
+    turno: str,
+    cupones: list[tuple],
+) -> list[tuple]:
+    """
+    Obtiene el importe total apostado por cupón,
+    considerando todos los extractos del turno.
+
+    Suma todas las líneas de apuesta del cupón.
+
+    n_impapos se divide por 100 para obtener pesos.
+
+    Devuelve:
+        agencia,
+        subagencia,
+        maquina,
+        cupon,
+        importe_apostado
+    """
+
+    if not cupones:
+        return []
+
+    columnas = list(zip(*cupones))
+
+    agencias = [int(x) for x in columnas[0]]
+    subagencias = [int(x) for x in columnas[1]]
+    maquinas = [int(x) for x in columnas[2]]
+    numeros_cupon = [int(x) for x in columnas[3]]
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH cupones_buscados AS (
+                SELECT DISTINCT
+                    agencia,
+                    subagencia,
+                    maquina,
+                    cupon
+                FROM UNNEST(
+                    %s::integer[],
+                    %s::integer[],
+                    %s::integer[],
+                    %s::integer[]
+                ) AS x(
+                    agencia,
+                    subagencia,
+                    maquina,
+                    cupon
+                )
+            )
+            SELECT
+                q.n_agent,
+                q.n_subag,
+                q.n_maqui,
+                q.n_cupon,
+                COALESCE(
+                    SUM(q.n_impapos),
+                    0
+                ) / 100.0 AS importe_apostado
+            FROM quiniela_exp q
+            JOIN cupones_buscados c
+                ON q.n_agent = c.agencia
+               AND q.n_subag = c.subagencia
+               AND q.n_maqui = c.maquina
+               AND q.n_cupon = c.cupon
+            WHERE q.n_fsorteo = %s
+              AND TRIM(q.c_tsorteo) = %s
+            GROUP BY
+                q.n_agent,
+                q.n_subag,
+                q.n_maqui,
+                q.n_cupon
+            ORDER BY
+                q.n_agent,
+                q.n_subag,
+                q.n_maqui,
+                q.n_cupon
+            """,
+            (
+                agencias,
+                subagencias,
+                maquinas,
+                numeros_cupon,
+                fecha,
+                turno,
+            ),
+        )
+
+        return cur.fetchall()

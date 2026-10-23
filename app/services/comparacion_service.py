@@ -1,3 +1,4 @@
+
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
@@ -207,14 +208,20 @@ def comparar_sistema_con_dbf(
     try:
         with transaction() as conn:
 
+            # ========================================================
             # VALIDAR EVENTO ABIERTO
+            # ========================================================
+
             validar_evento_abierto(
                 conn=conn,
                 fecha=fecha,
                 turno=turno_normalizado,
             )
 
+            # ========================================================
             # VALIDAR PRECONDICIONES
+            # ========================================================
+
             estado = auditoria_repository.obtener_estado_por_fecha(
                 conn=conn,
                 fecha=fecha,
@@ -244,7 +251,10 @@ def comparar_sistema_con_dbf(
             if not dbf_cargado:
                 raise DbfNoCargadoError()
 
+            # ========================================================
             # OBTENER GANADORES
+            # ========================================================
+
             ganadores_sistema = (
                 comparacion_repository.obtener_ganadores_sistema(
                     conn=conn,
@@ -269,7 +279,7 @@ def comparar_sistema_con_dbf(
             solo_dbf = set_dbf - set_sistema
 
             # ========================================================
-            # NUEVO: IMPORTES APOSTADOS DE SOLO_SISTEMA
+            # IMPORTES APOSTADOS DE SOLO_SISTEMA
             # ========================================================
 
             filas_importes = (
@@ -300,7 +310,10 @@ def comparar_sistema_con_dbf(
                 ) in filas_importes
             }
 
+            # ========================================================
             # ACIERTOS POR EXTRACTO
+            # ========================================================
+
             por_extracto_sistema = (
                 comparacion_repository
                 .obtener_aciertos_sistema_por_extracto(
@@ -324,24 +337,20 @@ def comparar_sistema_con_dbf(
                 dbf=por_extracto_dbf,
             )
 
-            # EXTRACTOS CON DIFERENCIAS
+            # ========================================================
+            # EXTRACTOS CON DIFERENCIAS EN CANTIDAD DE ACIERTOS
+            # ========================================================
+
             extractos_con_diferencias = sorted(
-                {
-                    item["codigo_extracto"]
-                    for item in por_extracto
-                    if item["diferencia"] != 0
-                }
-                | {
-                    int(item[0])
-                    for item in solo_sistema
-                }
-                | {
-                    int(item[0])
-                    for item in solo_dbf
-                }
+                item["codigo_extracto"]
+                for item in por_extracto
+                if item["diferencia"] != 0
             )
 
+            # ========================================================
             # TOTALES DE ACIERTOS
+            # ========================================================
+
             total_aciertos_sistema = sum(
                 item["sistema"]
                 for item in por_extracto
@@ -352,7 +361,10 @@ def comparar_sistema_con_dbf(
                 for item in por_extracto
             )
 
+            # ========================================================
             # CUPONES GANADORES ÚNICOS
+            # ========================================================
+
             cupones_unicos_sistema = (
                 comparacion_repository
                 .contar_cupones_ganadores_unicos_sistema(
@@ -371,7 +383,10 @@ def comparar_sistema_con_dbf(
                 )
             )
 
+            # ========================================================
             # MONTOS GANADOS POR CUPÓN
+            # ========================================================
+
             montos_sistema_cupon = (
                 comparacion_repository
                 .obtener_montos_sistema_por_cupon(
@@ -397,8 +412,11 @@ def comparar_sistema_con_dbf(
                 )
             )
 
-            # EXTRACTOS CON DIFERENCIAS MONETARIAS
-            cupones_con_diferencias_montos = [
+            # ========================================================
+            # IMPORTES APOSTADOS EN DIFERENCIAS DE MONTOS
+            # ========================================================
+
+            cupones_diferencias_montos = [
                 (
                     item["agencia"],
                     item["subagencia"],
@@ -408,22 +426,48 @@ def comparar_sistema_con_dbf(
                 for item in comparacion_montos["diferencias"]
             ]
 
-            extractos_diferencias_montos = (
+            filas_importes_montos = (
                 comparacion_repository
-                .obtener_extractos_por_cupones(
+                .obtener_importes_apostados_cupones_global(
                     conn=conn,
                     fecha=fecha,
                     turno=turno_normalizado,
-                    cupones=cupones_con_diferencias_montos,
+                    cupones=cupones_diferencias_montos,
                 )
             )
 
-            extractos_con_diferencias = sorted(
-                set(extractos_con_diferencias)
-                | set(extractos_diferencias_montos)
-            )
+            importes_por_cupon = {
+                (
+                    int(agencia),
+                    int(subagencia),
+                    int(maquina),
+                    int(cupon),
+                ): float(_decimal_monto(importe))
+                for (
+                    agencia,
+                    subagencia,
+                    maquina,
+                    cupon,
+                    importe,
+                ) in filas_importes_montos
+            }
 
+            for item in comparacion_montos["diferencias"]:
+                clave = (
+                    item["agencia"],
+                    item["subagencia"],
+                    item["maquina"],
+                    item["cupon"],
+                )
+
+                item["importe_apostado"] = (
+                    importes_por_cupon.get(clave)
+                )
+
+            # ========================================================
             # IMPORTES APOSTADOS POR EXTRACTO
+            # ========================================================
+
             importes_apostados_db = (
                 comparacion_repository
                 .obtener_importes_apostados_por_extracto(
@@ -450,14 +494,20 @@ def comparar_sistema_con_dbf(
                 Decimal("0.00"),
             )
 
+            # ========================================================
             # RESULTADO GENERAL
+            # ========================================================
+
             hay_diferencias = (
                 len(solo_sistema) > 0
                 or len(solo_dbf) > 0
                 or len(comparacion_montos["diferencias"]) > 0
             )
 
+            # ========================================================
             # ACTUALIZAR RESUMEN
+            # ========================================================
+
             comparacion_repository.actualizar_cupones_dbf_resumen(
                 conn=conn,
                 fecha=fecha,
@@ -465,7 +515,10 @@ def comparar_sistema_con_dbf(
                 cantidad=cupones_unicos_dbf,
             )
 
+            # ========================================================
             # MARCAR COMPARACIÓN EJECUTADA
+            # ========================================================
+
             auditoria_repository.marcar_comparacion_ejecutada(
                 conn=conn,
                 fecha=fecha,
@@ -473,7 +526,10 @@ def comparar_sistema_con_dbf(
                 hay_diferencias=hay_diferencias,
             )
 
+        # ============================================================
         # LOG
+        # ============================================================
+
         logger.info(
             "Comparación sistema/DBF: "
             "fecha=%s turno=%s "
@@ -501,7 +557,10 @@ def comparar_sistema_con_dbf(
             hay_diferencias,
         )
 
+        # ============================================================
         # RESPONSE
+        # ============================================================
+
         return {
             "ok": True,
             "fecha": fecha,
