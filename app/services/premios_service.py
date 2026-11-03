@@ -232,14 +232,12 @@ def es_a_la_cabeza(
 def numero_anterior(
     valor,
     ancho,
-) -> str | None:
+) -> str:
+    limite = 10 ** ancho
     numero = int(valor)
 
-    if numero == 0:
-        return None
-
     return str(
-        numero - 1
+        (numero - 1) % limite
     ).zfill(
         ancho
     )
@@ -248,16 +246,12 @@ def numero_anterior(
 def numero_siguiente(
     valor,
     ancho,
-) -> str | None:
+) -> str:
+    limite = 10 ** ancho
     numero = int(valor)
 
-    if numero == (
-        10 ** ancho
-    ) - 1:
-        return None
-
     return str(
-        numero + 1
+        (numero + 1) % limite
     ).zfill(
         ancho
     )
