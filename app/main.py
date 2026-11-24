@@ -21,7 +21,7 @@ from app.routers.reporte_router import router as reporte_router
 from app.routers.users_router import router as users_router
 from app.routers.proceso_router import router as proceso_router
 from app.services.bootstrap_service import crear_admin_inicial
-
+from app.routers.cupones_router import router as cupones_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -64,6 +64,7 @@ app.include_router(comparacion_router)
 app.include_router(auditoria_router)
 app.include_router(reporte_router)
 app.include_router(proceso_router)
+app.include_router(cupones_router)
 
 @app.get(
     "/",
